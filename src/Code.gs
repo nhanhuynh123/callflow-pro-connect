@@ -7,26 +7,50 @@ const DAILY_CUSTOMER_LIMIT = 100;
 
 // Web app endpoints
 function doGet(e) {
-  const userEmail = Session.getActiveUser().getEmail();
-  
-  // Check if user is authorized
-  if (!isAuthorizedUser(userEmail)) {
-    return HtmlService.createHtmlOutput('<h1>Unauthorized Access</h1><p>You are not authorized to use this application.</p>')
+  try {
+    const userEmail = Session.getActiveUser().getEmail();
+    console.log("Active user email: " + userEmail);
+    
+    // Check if user is authorized
+    const isAuthorized = isAuthorizedUser(userEmail);
+    console.log("Is user authorized: " + isAuthorized);
+    
+    if (!isAuthorized) {
+      return HtmlService.createHtmlOutput(
+        '<h1>Unauthorized Access</h1>' +
+        '<p>You are not authorized to use this application.</p>' +
+        '<p>Your email: ' + userEmail + '</p>' +
+        '<p>Please contact the administrator to get access.</p>'
+      )
       .setTitle('Telesales CRM - Unauthorized')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-  
-  // Check if admin or regular user
-  if (isAdmin(userEmail)) {
-    return HtmlService.createTemplateFromFile('admin')
-      .evaluate()
-      .setTitle('Telesales CRM - Admin Dashboard')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  } else {
-    return HtmlService.createTemplateFromFile('index')
-      .evaluate()
-      .setTitle('Telesales CRM - Agent Dashboard')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+    
+    // Check if admin or regular user
+    const isAdminUser = isAdmin(userEmail);
+    console.log("Is user admin: " + isAdminUser);
+    
+    if (isAdminUser) {
+      return HtmlService.createTemplateFromFile('admin')
+        .evaluate()
+        .setTitle('Telesales CRM - Admin Dashboard')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } else {
+      return HtmlService.createTemplateFromFile('index')
+        .evaluate()
+        .setTitle('Telesales CRM - Agent Dashboard')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+  } catch (error) {
+    console.error("Error in doGet: " + error);
+    return HtmlService.createHtmlOutput(
+      '<h1>Error Occurred</h1>' +
+      '<p>An error occurred while processing your request:</p>' +
+      '<pre>' + error.toString() + '</pre>' +
+      '<p>Please contact the administrator for assistance.</p>'
+    )
+    .setTitle('Telesales CRM - Error')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 }
 
