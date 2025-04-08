@@ -39,6 +39,7 @@ const Index = () => {
             <li>Quản lý khách hàng: thêm, sửa, xóa, import CSV</li>
             <li>Lọc tự động khách hàng trùng lặp khi import</li>
             <li>Báo cáo và lịch sử liên hệ</li>
+            <li>Hỗ trợ đăng xuất tài khoản</li>
           </ul>
           
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Mới! Tính năng Dashboard:</h3>
@@ -47,6 +48,7 @@ const Index = () => {
             <li>Biểu đồ phân phối đánh giá (1 sao, 2 sao, 3 sao)</li>
             <li>Biểu đồ hiệu suất nhân viên</li>
             <li>Quản lý khách hàng nâng cao (sửa, xóa, lọc trùng lặp)</li>
+            <li>Import khách hàng từ file CSV</li>
           </ul>
         </div>
       </div>

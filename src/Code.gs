@@ -281,6 +281,17 @@ function getCurrentAssignedCustomer() {
   return { success: false };
 }
 
+// Logout function
+function logoutUser() {
+  var authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  // Unfortunately, Google Apps Script doesn't provide a direct way to log out a user
+  // We'll return a URL that can be used to sign out of Google accounts
+  return {
+    success: true,
+    logoutUrl: 'https://accounts.google.com/logout'
+  };
+}
+
 // ADMIN FUNCTIONS
 
 // Get all agents

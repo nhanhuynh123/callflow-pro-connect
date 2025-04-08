@@ -14,6 +14,7 @@
         <h1>Telesales CRM - Admin</h1>
         <div class="user-info">
           <span id="user-name">Loading...</span>
+          <button id="logout-btn" class="btn btn-sm btn-secondary mt-2">Đăng xuất</button>
         </div>
       </header>
       
@@ -67,7 +68,18 @@
             <div class="form-group">
               <h3>Import Customers (CSV)</h3>
               <p class="hint">Format: Name,Phone (one per line). Duplicates will be automatically filtered out.</p>
-              <textarea id="csv-data" class="form-control" rows="5" placeholder="John Doe,+1234567890&#10;Jane Smith,+0987654321"></textarea>
+              <div class="csv-import-container">
+                <div class="file-upload-wrapper">
+                  <input type="file" id="csv-file-input" accept=".csv" class="file-upload-input">
+                  <label for="csv-file-input" class="file-upload-label">
+                    <span class="upload-icon">📄</span>
+                    <span>Chọn file CSV</span>
+                  </label>
+                  <span id="selected-file-name" class="selected-file-name">Chưa có file được chọn</span>
+                </div>
+                <button id="process-csv-btn" class="btn btn-primary" disabled>Đọc file CSV</button>
+              </div>
+              <textarea id="csv-data" class="form-control mt-3" rows="5" placeholder="John Doe,+1234567890&#10;Jane Smith,+0987654321" readonly></textarea>
               <button id="import-csv-btn" class="btn btn-primary">Import</button>
               <p id="import-message" class="message hidden"></p>
             </div>
@@ -249,6 +261,61 @@
         
         // Load contact history
         loadContactHistory();
+        
+        // Set up logout button
+        document.getElementById('logout-btn').addEventListener('click', logout);
+        
+        // Set up CSV file upload
+        setupCsvFileUpload();
+      }
+      
+      // Set up CSV file upload
+      function setupCsvFileUpload() {
+        const fileInput = document.getElementById('csv-file-input');
+        const fileNameDisplay = document.getElementById('selected-file-name');
+        const processButton = document.getElementById('process-csv-btn');
+        
+        fileInput.addEventListener('change', function() {
+          if (this.files && this.files.length > 0) {
+            fileNameDisplay.textContent = this.files[0].name;
+            processButton.disabled = false;
+          } else {
+            fileNameDisplay.textContent = 'Chưa có file được chọn';
+            processButton.disabled = true;
+          }
+        });
+        
+        processButton.addEventListener('click', function() {
+          const file = fileInput.files[0];
+          if (!file) {
+            showMessage('import-message', 'Vui lòng chọn file CSV', 'error');
+            return;
+          }
+          
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const csvContent = e.target.result;
+            document.getElementById('csv-data').value = csvContent;
+          };
+          reader.onerror = function() {
+            showMessage('import-message', 'Lỗi khi đọc file', 'error');
+          };
+          reader.readAsText(file);
+        });
+      }
+      
+      // Logout function
+      function logout() {
+        if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+          google.script.run
+            .withSuccessHandler(function(result) {
+              if (result.success && result.logoutUrl) {
+                window.location.href = result.logoutUrl;
+              }
+            })
+            .withFailureHandler(handleError)
+            .logoutUser();
+        }
       }
       
       // Handle user info
@@ -671,7 +738,7 @@
         const csvData = document.getElementById('csv-data').value.trim();
         
         if (!csvData) {
-          showMessage('import-message', 'Please enter CSV data.', 'error');
+          showMessage('import-message', 'Vui lòng nhập dữ liệu CSV hoặc tải lên file CSV.', 'error');
           return;
         }
         
@@ -680,6 +747,9 @@
             if (result.success) {
               // Clear input
               document.getElementById('csv-data').value = '';
+              document.getElementById('csv-file-input').value = '';
+              document.getElementById('selected-file-name').textContent = 'Chưa có file được chọn';
+              document.getElementById('process-csv-btn').disabled = true;
               
               // Show success message
               showMessage('import-message', result.message, 'success');
@@ -688,11 +758,11 @@
               loadCustomers();
               loadDashboardData();
             } else {
-              showMessage('import-message', 'Error: ' + result.message, 'error');
+              showMessage('import-message', 'Lỗi: ' + result.message, 'error');
             }
           })
           .withFailureHandler(function(error) {
-            showMessage('import-message', 'Error: ' + error.message, 'error');
+            showMessage('import-message', 'Lỗi: ' + error.message, 'error');
           })
           .importCustomersFromCSV(csvData);
       }
