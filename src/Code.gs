@@ -1,4 +1,3 @@
-
 // Global constants
 const SPREADSHEET_ID = ''; // You'll need to replace this with your actual spreadsheet ID
 const CUSTOMER_SHEET_NAME = 'Customers';
@@ -397,12 +396,79 @@ function addCustomer(name, phone) {
   return { success: true };
 }
 
-// Import customers from CSV
+// Update customer
+function updateCustomer(customerId, name, phone) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  const customerData = customersSheet.getDataRange().getValues();
+  const headers = customerData[0];
+  
+  // Find column indexes
+  const idColIndex = headers.indexOf('CustomerID');
+  const nameColIndex = headers.indexOf('Name');
+  const phoneColIndex = headers.indexOf('Phone');
+  
+  // Find the customer
+  for (let i = 1; i < customerData.length; i++) {
+    if (customerData[i][idColIndex] === customerId) {
+      const row = i + 1; // Convert to 1-based index
+      
+      // Update customer data
+      customersSheet.getRange(row, nameColIndex + 1).setValue(name);
+      customersSheet.getRange(row, phoneColIndex + 1).setValue(phone);
+      
+      return { success: true };
+    }
+  }
+  
+  return { 
+    success: false, 
+    message: 'Customer not found.' 
+  };
+}
+
+// Delete customer
+function deleteCustomer(customerId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  const customerData = customersSheet.getDataRange().getValues();
+  const headers = customerData[0];
+  
+  // Find column index
+  const idColIndex = headers.indexOf('CustomerID');
+  
+  // Find the customer
+  for (let i = 1; i < customerData.length; i++) {
+    if (customerData[i][idColIndex] === customerId) {
+      const row = i + 1; // Convert to 1-based index
+      customersSheet.deleteRow(row);
+      return { success: true };
+    }
+  }
+  
+  return { 
+    success: false, 
+    message: 'Customer not found.' 
+  };
+}
+
+// Import customers from CSV with duplicate filtering
 function importCustomersFromCSV(csvData) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
     const customerData = customersSheet.getDataRange().getValues();
+    
+    // Get existing phone numbers to check for duplicates
+    const existingPhones = {};
+    const phoneColIndex = customerData[0].indexOf('Phone');
+    
+    for (let i = 1; i < customerData.length; i++) {
+      const phone = customerData[i][phoneColIndex].toString().trim();
+      if (phone) {
+        existingPhones[phone] = true;
+      }
+    }
     
     // Generate new IDs starting from current max
     let maxId = 0;
@@ -416,18 +482,31 @@ function importCustomersFromCSV(csvData) {
     // Parse CSV
     const rows = csvData.split('\n');
     let importCount = 0;
+    let duplicateCount = 0;
     
     for (let i = 0; i < rows.length; i++) {
       const cols = rows[i].split(',');
       if (cols.length >= 2 && cols[0] && cols[1]) {
+        const name = cols[0].trim();
+        const phone = cols[1].trim();
+        
+        // Check for duplicates
+        if (existingPhones[phone]) {
+          duplicateCount++;
+          continue;
+        }
+        
+        // Add to existing phones to prevent duplicates within import
+        existingPhones[phone] = true;
+        
         maxId++;
         const newId = 'C' + maxId.toString().padStart(4, '0');
         
         // Add new customer
         customersSheet.appendRow([
           newId,           // CustomerID
-          cols[0].trim(),  // Name
-          cols[1].trim(),  // Phone
+          name,            // Name
+          phone,           // Phone
           'New',           // Status
           '',              // AssignedTo
           '',              // AssignedTimestamp
@@ -441,7 +520,7 @@ function importCustomersFromCSV(csvData) {
     
     return { 
       success: true, 
-      message: `Successfully imported ${importCount} customers.` 
+      message: `Successfully imported ${importCount} customers. Skipped ${duplicateCount} duplicates.` 
     };
   } catch (e) {
     return { 
@@ -449,6 +528,102 @@ function importCustomersFromCSV(csvData) {
       message: 'Error importing customers: ' + e.toString() 
     };
   }
+}
+
+// Get dashboard statistics
+function getDashboardStats() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  const customerData = customersSheet.getDataRange().getValues();
+  const headers = customerData[0];
+  
+  // Find column indexes
+  const statusColIndex = headers.indexOf('Status');
+  const ratingColIndex = headers.indexOf('Rating');
+  const assignedToColIndex = headers.indexOf('AssignedTo');
+  
+  // Initialize counters
+  const customerStats = {
+    new: 0,
+    assigned: 0,
+    contacted: 0
+  };
+  
+  const ratingStats = {
+    noRating: 0,
+    rating1: 0,
+    rating2: 0,
+    rating3: 0
+  };
+  
+  const agentStats = {};
+  
+  // Count statistics
+  for (let i = 1; i < customerData.length; i++) {
+    const status = customerData[i][statusColIndex];
+    const rating = customerData[i][ratingColIndex];
+    const agent = customerData[i][assignedToColIndex];
+    
+    // Customer status counts
+    if (status === 'New') {
+      customerStats.new++;
+    } else if (status === 'Assigned') {
+      customerStats.assigned++;
+    } else if (status === 'Contacted') {
+      customerStats.contacted++;
+      
+      // Rating counts
+      if (!rating) {
+        ratingStats.noRating++;
+      } else if (rating === 1) {
+        ratingStats.rating1++;
+      } else if (rating === 2) {
+        ratingStats.rating2++;
+      } else if (rating === 3) {
+        ratingStats.rating3++;
+      }
+      
+      // Agent performance
+      if (agent) {
+        if (!agentStats[agent]) {
+          agentStats[agent] = {
+            contacted: 0,
+            rating1: 0,
+            rating2: 0,
+            rating3: 0
+          };
+        }
+        
+        agentStats[agent].contacted++;
+        
+        if (rating === 1) {
+          agentStats[agent].rating1++;
+        } else if (rating === 2) {
+          agentStats[agent].rating2++;
+        } else if (rating === 3) {
+          agentStats[agent].rating3++;
+        }
+      }
+    }
+  }
+  
+  // Convert agent stats to array for easier processing in frontend
+  const agentPerformance = [];
+  for (const email in agentStats) {
+    agentPerformance.push({
+      email: email,
+      contacted: agentStats[email].contacted,
+      rating1: agentStats[email].rating1,
+      rating2: agentStats[email].rating2,
+      rating3: agentStats[email].rating3
+    });
+  }
+  
+  return {
+    customerStats: customerStats,
+    ratingStats: ratingStats,
+    agentPerformance: agentPerformance
+  };
 }
 
 // Get contact history with filters

@@ -10,40 +10,49 @@ const Index = () => {
         <div className="bg-blue-50 border border-blue-200 rounded-md p-5 mb-8">
           <h2 className="text-xl font-semibold text-blue-800 mb-3">Google Apps Script Project</h2>
           <p className="text-gray-700 mb-4">
-            This is a React visualization of the Google Apps Script project. To use the actual application, please follow the setup instructions below.
+            Hệ thống CRM cho đội ngũ telesales được xây dựng bằng Google Apps Script và Google Sheets.
           </p>
         </div>
         
         <div className="text-left">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Setup Instructions:</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Hướng dẫn cài đặt:</h3>
           <ol className="list-decimal list-inside space-y-2 text-gray-700 mb-6">
-            <li>Create a new Google Spreadsheet in your Google Drive</li>
-            <li>Open the spreadsheet and go to Extensions → Apps Script</li>
-            <li>Copy the provided Code.gs file content into the script editor</li>
-            <li>Create additional HTML files (index.html, admin.html, stylesheet.html)</li>
-            <li>Update the SPREADSHEET_ID constant in Code.gs with your spreadsheet's ID</li>
-            <li>Run the setupSpreadsheet function once to initialize your sheets</li>
-            <li>Deploy as a web app (Deploy → New deployment → Web app)</li>
-            <li>Set access to "Anyone" and execute as "User accessing the web app"</li>
-            <li>Copy the web app URL and share with your team</li>
+            <li>Tạo một Google Spreadsheet mới trong Google Drive của bạn</li>
+            <li>Mở spreadsheet và vào Extensions → Apps Script</li>
+            <li>Sao chép nội dung của tệp Code.gs vào trình soạn thảo script</li>
+            <li>Tạo thêm các tệp HTML (index.html, admin.html, stylesheet.html)</li>
+            <li>Cập nhật hằng số SPREADSHEET_ID trong Code.gs với ID của spreadsheet của bạn</li>
+            <li>Chạy hàm setupSpreadsheet một lần để khởi tạo cấu trúc bảng tính</li>
+            <li>Triển khai dưới dạng ứng dụng web (Deploy → New deployment → Web app)</li>
+            <li>Đặt quyền truy cập là "Anyone" và thực thi dưới dạng "User accessing the web app"</li>
+            <li>Sao chép URL của ứng dụng web và chia sẻ với team của bạn</li>
           </ol>
           
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Features:</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Tính năng:</h3>
+          <ul className="list-disc list-inside space-y-2 text-gray-700 mb-6">
+            <li>Xác thực người dùng dựa trên tài khoản Google</li>
+            <li>Hệ thống phân quyền (Admin/User)</li>
+            <li>Hệ thống gán khách hàng cho nhân viên telesales</li>
+            <li>Giới hạn số lượng khách hàng mỗi ngày cho mỗi nhân viên (100 khách hàng)</li>
+            <li>Hệ thống đánh giá khách hàng (1-3 sao)</li>
+            <li>Dashboard quản trị với biểu đồ thống kê</li>
+            <li>Quản lý khách hàng: thêm, sửa, xóa, import CSV</li>
+            <li>Lọc tự động khách hàng trùng lặp khi import</li>
+            <li>Báo cáo và lịch sử liên hệ</li>
+          </ul>
+          
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Mới! Tính năng Dashboard:</h3>
           <ul className="list-disc list-inside space-y-2 text-gray-700">
-            <li>User authentication based on Google account</li>
-            <li>Role-based access (Admin/User)</li>
-            <li>Customer assignment system for telesales agents</li>
-            <li>Daily limits per agent (100 customers)</li>
-            <li>Customer rating system (1-3 stars)</li>
-            <li>Admin dashboard for customer/agent management</li>
-            <li>Reports and contact history</li>
-            <li>CSV import functionality</li>
+            <li>Biểu đồ phân phối trạng thái khách hàng (mới, đã gán, đã liên hệ)</li>
+            <li>Biểu đồ phân phối đánh giá (1 sao, 2 sao, 3 sao)</li>
+            <li>Biểu đồ hiệu suất nhân viên</li>
+            <li>Quản lý khách hàng nâng cao (sửa, xóa, lọc trùng lặp)</li>
           </ul>
         </div>
       </div>
       
       <div className="mt-8 text-gray-500 text-sm">
-        Note: The files above contain the complete source code for a Google Apps Script telesales CRM system.
+        Lưu ý: Các tệp trên chứa mã nguồn đầy đủ cho hệ thống CRM telesales Google Apps Script.
       </div>
     </div>
   );
