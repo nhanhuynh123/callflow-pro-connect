@@ -8,19 +8,34 @@ const DAILY_CUSTOMER_LIMIT = 100;
 // Web app endpoints
 function doGet(e) {
   try {
+    // Get the active user email
     const userEmail = Session.getActiveUser().getEmail();
     console.log("Active user email: " + userEmail);
+    
+    // Check if user email is empty (which can happen when auth isn't working properly)
+    if (!userEmail || userEmail === "") {
+      return HtmlService.createHtmlOutput(
+        '<h1>Authentication Issue</h1>' +
+        '<p>Unable to retrieve your email address.</p>' +
+        '<p>This could be due to how the web app is deployed. Please contact the administrator.</p>' +
+        '<p>Technical details: The system cannot determine your email address through Session.getActiveUser().</p>'
+      )
+      .setTitle('Telesales CRM - Authentication Error')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
     
     // Check if user is authorized
     const isAuthorized = isAuthorizedUser(userEmail);
     console.log("Is user authorized: " + isAuthorized);
     
     if (!isAuthorized) {
+      // Show more detailed unauthorized message with the email for debugging
       return HtmlService.createHtmlOutput(
         '<h1>Unauthorized Access</h1>' +
         '<p>You are not authorized to use this application.</p>' +
-        '<p>Your email: ' + userEmail + '</p>' +
-        '<p>Please contact the administrator to get access.</p>'
+        '<p>Your email: <strong>' + userEmail + '</strong></p>' +
+        '<p>Please contact the administrator to get access.</p>' +
+        '<p><a href="https://accounts.google.com/logout" target="_blank">Log out and try with a different account</a></p>'
       )
       .setTitle('Telesales CRM - Unauthorized')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -61,32 +76,61 @@ function include(filename) {
 
 // Check if user is authorized (in Agents sheet)
 function isAuthorizedUser(email) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
-  const agentsData = agentsSheet.getDataRange().getValues();
-  
-  // Skip header row
-  for (let i = 1; i < agentsData.length; i++) {
-    if (agentsData[i][0].toLowerCase() === email.toLowerCase()) {
-      return true;
-    }
+  if (!email || email === "") {
+    console.error("Empty email provided to isAuthorizedUser");
+    return false;
   }
-  return false;
+  
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
+    const agentsData = agentsSheet.getDataRange().getValues();
+    
+    // Skip header row
+    for (let i = 1; i < agentsData.length; i++) {
+      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
+      const userEmail = email.toString().trim().toLowerCase();
+      
+      console.log("Comparing: [" + agentEmail + "] with [" + userEmail + "]");
+      
+      if (agentEmail === userEmail) {
+        console.log("User authorized: " + email);
+        return true;
+      }
+    }
+    
+    console.log("User not found in agents list: " + email);
+    return false;
+  } catch (error) {
+    console.error("Error in isAuthorizedUser: " + error);
+    return false;
+  }
 }
 
 // Check if user is an admin
 function isAdmin(email) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
-  const agentsData = agentsSheet.getDataRange().getValues();
+  if (!email || email === "") return false;
   
-  // Skip header row
-  for (let i = 1; i < agentsData.length; i++) {
-    if (agentsData[i][0].toLowerCase() === email.toLowerCase() && agentsData[i][2] === true) {
-      return true;
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
+    const agentsData = agentsSheet.getDataRange().getValues();
+    
+    // Skip header row
+    for (let i = 1; i < agentsData.length; i++) {
+      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
+      const userEmail = email.toString().trim().toLowerCase();
+      
+      if (agentEmail === userEmail && agentsData[i][2] === true) {
+        return true;
+      }
     }
+    
+    return false;
+  } catch (error) {
+    console.error("Error in isAdmin: " + error);
+    return false;
   }
-  return false;
 }
 
 // Get current user's email
