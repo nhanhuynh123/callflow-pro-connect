@@ -1,0 +1,294 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <?!= include('stylesheet'); ?>
+    <title>Telesales CRM - Agent Dashboard</title>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Telesales CRM</h1>
+        <div class="user-info">
+          <span id="user-name">Loading...</span>
+          <span id="daily-count">Loading...</span>
+        </div>
+      </header>
+      
+      <main>
+        <div id="loading-section" class="card">
+          <div class="loading-spinner"></div>
+          <p>Loading your dashboard...</p>
+        </div>
+        
+        <div id="customer-section" class="card hidden">
+          <h2>Customer Assignment</h2>
+          
+          <div id="no-customer-panel">
+            <p>You don't have any customer assigned currently.</p>
+            <button id="get-customer-btn" class="btn btn-primary">Get New Customer</button>
+            <p id="error-message" class="error hidden"></p>
+          </div>
+          
+          <div id="current-customer-panel" class="hidden">
+            <div class="customer-info">
+              <h3>Current Customer</h3>
+              <div class="info-row">
+                <span class="label">Name:</span>
+                <span id="customer-name" class="value"></span>
+              </div>
+              <div class="info-row">
+                <span class="label">Phone:</span>
+                <span id="customer-phone" class="value"></span>
+                <a id="call-link" href="#" class="btn btn-sm btn-secondary" target="_blank">Call</a>
+              </div>
+            </div>
+            
+            <div class="rating-section">
+              <h3>Submit Rating</h3>
+              <p>Please rate this customer after contact:</p>
+              <div class="rating-buttons">
+                <button class="btn btn-rating" data-rating="1">1</button>
+                <button class="btn btn-rating" data-rating="2">2</button>
+                <button class="btn btn-rating" data-rating="3">3</button>
+              </div>
+              <p id="rating-error" class="error hidden"></p>
+            </div>
+          </div>
+        </div>
+        
+        <div id="limit-reached-panel" class="card hidden">
+          <h2>Daily Limit Reached</h2>
+          <p>You have reached your daily limit of 100 customers.</p>
+          <p>Please come back tomorrow for more assignments.</p>
+        </div>
+      </main>
+      
+      <footer>
+        <p>&copy; 2025 Telesales CRM</p>
+      </footer>
+    </div>
+    
+    <script>
+      // Global variables
+      let currentCustomer = null;
+      
+      // Initialize page
+      function initPage() {
+        // Hide all panels initially
+        document.getElementById('loading-section').classList.remove('hidden');
+        document.getElementById('customer-section').classList.add('hidden');
+        document.getElementById('limit-reached-panel').classList.add('hidden');
+        
+        // Load user info
+        google.script.run
+          .withSuccessHandler(handleUserInfo)
+          .withFailureHandler(handleError)
+          .getCurrentUserInfo();
+          
+        // Load daily count
+        google.script.run
+          .withSuccessHandler(handleDailyCount)
+          .withFailureHandler(handleError)
+          .getTodayCustomerCount();
+          
+        // Check if user has a customer already assigned
+        google.script.run
+          .withSuccessHandler(handleCurrentCustomer)
+          .withFailureHandler(handleError)
+          .getCurrentAssignedCustomer();
+      }
+      
+      // Handle user info
+      function handleUserInfo(userInfo) {
+        document.getElementById('user-name').textContent = 'User: ' + userInfo.name;
+      }
+      
+      // Handle daily count
+      function handleDailyCount(count) {
+        document.getElementById('daily-count').textContent = 'Today: ' + count + '/100 customers';
+        
+        // Check if limit reached
+        if (count >= 100) {
+          showLimitReached();
+        }
+      }
+      
+      // Show limit reached panel
+      function showLimitReached() {
+        document.getElementById('loading-section').classList.add('hidden');
+        document.getElementById('customer-section').classList.add('hidden');
+        document.getElementById('limit-reached-panel').classList.remove('hidden');
+      }
+      
+      // Handle current customer
+      function handleCurrentCustomer(result) {
+        document.getElementById('loading-section').classList.add('hidden');
+        document.getElementById('customer-section').classList.remove('hidden');
+        
+        if (result.success && result.customer) {
+          // Show customer info
+          currentCustomer = result.customer;
+          displayCustomerInfo(currentCustomer);
+        } else {
+          // Show get customer button
+          document.getElementById('no-customer-panel').classList.remove('hidden');
+          document.getElementById('current-customer-panel').classList.add('hidden');
+        }
+      }
+      
+      // Display customer info
+      function displayCustomerInfo(customer) {
+        document.getElementById('no-customer-panel').classList.add('hidden');
+        document.getElementById('current-customer-panel').classList.remove('hidden');
+        
+        document.getElementById('customer-name').textContent = customer.name;
+        document.getElementById('customer-phone').textContent = customer.phone;
+        
+        // Set up call link
+        const callLink = document.getElementById('call-link');
+        callLink.href = 'tel:' + customer.phone;
+      }
+      
+      // Get new customer
+      function getNewCustomer() {
+        // Show loading
+        document.getElementById('error-message').classList.add('hidden');
+        document.getElementById('get-customer-btn').disabled = true;
+        document.getElementById('get-customer-btn').textContent = 'Loading...';
+        
+        // Request new customer
+        google.script.run
+          .withSuccessHandler(handleNewCustomer)
+          .withFailureHandler(handleGetCustomerError)
+          .getNewCustomer();
+      }
+      
+      // Handle new customer assignment
+      function handleNewCustomer(result) {
+        document.getElementById('get-customer-btn').disabled = false;
+        document.getElementById('get-customer-btn').textContent = 'Get New Customer';
+        
+        if (result.success) {
+          // Update current customer
+          currentCustomer = result.customer;
+          
+          // Update UI
+          displayCustomerInfo(currentCustomer);
+          
+          // Refresh daily count
+          google.script.run
+            .withSuccessHandler(handleDailyCount)
+            .getTodayCustomerCount();
+        } else {
+          // Show error
+          document.getElementById('error-message').textContent = result.message;
+          document.getElementById('error-message').classList.remove('hidden');
+          
+          // Check if limit reached
+          if (result.message.includes('daily limit')) {
+            showLimitReached();
+          }
+        }
+      }
+      
+      // Handle error getting customer
+      function handleGetCustomerError(error) {
+        document.getElementById('get-customer-btn').disabled = false;
+        document.getElementById('get-customer-btn').textContent = 'Get New Customer';
+        
+        document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        document.getElementById('error-message').classList.remove('hidden');
+      }
+      
+      // Submit rating
+      function submitRating(rating) {
+        if (!currentCustomer) {
+          return;
+        }
+        
+        // Disable rating buttons
+        const ratingButtons = document.querySelectorAll('.btn-rating');
+        ratingButtons.forEach(btn => {
+          btn.disabled = true;
+        });
+        
+        // Hide error
+        document.getElementById('rating-error').classList.add('hidden');
+        
+        // Submit rating
+        google.script.run
+          .withSuccessHandler(handleRatingSubmitted)
+          .withFailureHandler(handleRatingError)
+          .submitCustomerRating(currentCustomer.id, rating);
+      }
+      
+      // Handle rating submitted
+      function handleRatingSubmitted(result) {
+        if (result.success) {
+          // Reset current customer
+          currentCustomer = null;
+          
+          // Show get customer panel
+          document.getElementById('no-customer-panel').classList.remove('hidden');
+          document.getElementById('current-customer-panel').classList.add('hidden');
+          
+          // Re-enable rating buttons
+          const ratingButtons = document.querySelectorAll('.btn-rating');
+          ratingButtons.forEach(btn => {
+            btn.disabled = false;
+          });
+          
+          // Refresh daily count
+          google.script.run
+            .withSuccessHandler(handleDailyCount)
+            .getTodayCustomerCount();
+        } else {
+          handleRatingError(result);
+        }
+      }
+      
+      // Handle rating error
+      function handleRatingError(error) {
+        // Re-enable rating buttons
+        const ratingButtons = document.querySelectorAll('.btn-rating');
+        ratingButtons.forEach(btn => {
+          btn.disabled = false;
+        });
+        
+        // Show error
+        document.getElementById('rating-error').textContent = 'Error: ' + (error.message || 'Failed to submit rating.');
+        document.getElementById('rating-error').classList.remove('hidden');
+      }
+      
+      // Handle general error
+      function handleError(error) {
+        console.error('Error:', error);
+        alert('An error occurred: ' + (error.message || error));
+      }
+      
+      // Add event listeners
+      document.addEventListener('DOMContentLoaded', function() {
+        // Initialize page
+        initPage();
+        
+        // Get customer button
+        document.getElementById('get-customer-btn').addEventListener('click', function() {
+          getNewCustomer();
+        });
+        
+        // Rating buttons
+        const ratingButtons = document.querySelectorAll('.btn-rating');
+        ratingButtons.forEach(function(button) {
+          button.addEventListener('click', function() {
+            const rating = parseInt(this.getAttribute('data-rating'), 10);
+            submitRating(rating);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
