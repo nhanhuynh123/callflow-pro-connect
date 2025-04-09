@@ -44,6 +44,7 @@
       // Login button click handler
       document.getElementById('login-btn').addEventListener('click', function() {
         const email = document.getElementById('email').value.trim();
+        const loginMessage = document.getElementById('login-message');
         
         if (!email) {
           showMessage('login-message', 'Vui lòng nhập email của bạn', 'error');
@@ -56,8 +57,26 @@
           return;
         }
         
-        // Redirect to main page with email parameter
-        window.location.href = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
+        // Hiển thị thông báo loading
+        showMessage('login-message', 'Đang xử lý...', 'info');
+        
+        // Vô hiệu hóa nút đăng nhập để tránh nhấp nhiều lần
+        document.getElementById('login-btn').disabled = true;
+        
+        try {
+          // Chuyển hướng đến trang chính với tham số email
+          const redirectUrl = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
+          console.log("Redirecting to: " + redirectUrl);
+          
+          // Sử dụng cách khác để chuyển hướng
+          setTimeout(function() {
+            window.location.href = redirectUrl;
+          }, 100);
+        } catch (error) {
+          console.error("Redirect error:", error);
+          showMessage('login-message', 'Lỗi chuyển hướng: ' + error, 'error');
+          document.getElementById('login-btn').disabled = false;
+        }
       });
       
       // Validate email format
@@ -70,9 +89,16 @@
       function showMessage(elementId, message, type) {
         const element = document.getElementById(elementId);
         element.textContent = message;
-        element.classList.remove('hidden', 'success', 'error');
+        element.classList.remove('hidden', 'success', 'error', 'info');
         element.classList.add(type);
       }
+      
+      // Bắt sự kiện nhấn Enter trong input email
+      document.getElementById('email').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('login-btn').click();
+        }
+      });
     </script>
   </body>
 </html>

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
   <head>
@@ -72,6 +73,7 @@
       // Variables
       let currentCustomer = null;
       let userEmail = '';
+      let isProcessing = false; // Cờ ngăn thực hiện yêu cầu đồng thời
       
       // Initialize page
       function initPage() {
@@ -94,6 +96,8 @@
         // Rating buttons
         document.querySelectorAll('.btn-rating').forEach(button => {
           button.addEventListener('click', function() {
+            if (isProcessing) return; // Ngăn thực hiện đồng thời
+            
             const rating = this.getAttribute('data-rating');
             submitRating(rating);
           });
@@ -140,14 +144,23 @@
       
       // Get new customer
       function getNewCustomer() {
+        // Đang xử lý?
+        if (isProcessing) return;
+        isProcessing = true;
+        
         // Disable button to prevent multiple clicks
         document.getElementById('get-customer-btn').disabled = true;
+        showMessage('get-customer-message', 'Đang tìm kiếm khách hàng mới...', 'info');
         
         google.script.run
-          .withSuccessHandler(handleNewCustomer)
+          .withSuccessHandler(function(result) {
+            isProcessing = false;
+            handleNewCustomer(result);
+          })
           .withFailureHandler(function(error) {
+            isProcessing = false;
             document.getElementById('get-customer-btn').disabled = false;
-            handleError(error);
+            showMessage('get-customer-message', 'Lỗi: ' + error, 'error');
           })
           .getNewCustomer();
       }
@@ -165,6 +178,9 @@
             .withSuccessHandler(handleDailyCount)
             .withFailureHandler(handleError)
             .getTodayCustomerCount();
+            
+          // Xóa thông báo trước đó
+          document.getElementById('get-customer-message').classList.add('hidden');
         } else {
           showMessage('get-customer-message', result.message, 'error');
         }
@@ -186,17 +202,23 @@
       
       // Submit rating
       function submitRating(rating) {
-        if (!currentCustomer) {
+        if (!currentCustomer || isProcessing) {
           return;
         }
+        
+        isProcessing = true;
         
         // Disable rating buttons
         document.querySelectorAll('.btn-rating').forEach(button => {
           button.disabled = true;
         });
         
+        showMessage('rating-message', 'Đang xử lý đánh giá...', 'info');
+        
         google.script.run
           .withSuccessHandler(function(result) {
+            isProcessing = false;
+            
             if (result.success) {
               showMessage('rating-message', 'Đánh giá thành công!', 'success');
               
@@ -227,6 +249,7 @@
             }
           })
           .withFailureHandler(function(error) {
+            isProcessing = false;
             handleError(error);
             
             // Enable rating buttons
@@ -248,14 +271,16 @@
       function showMessage(elementId, message, type) {
         const element = document.getElementById(elementId);
         element.textContent = message;
-        element.classList.remove('hidden', 'success', 'error');
+        element.classList.remove('hidden', 'success', 'error', 'info');
         element.classList.add(type);
       }
       
       // Handle error
       function handleError(error) {
         console.error('Error:', error);
-        alert('Đã xảy ra lỗi: ' + (error.message || error));
+        // Giới hạn hiển thị toàn bộ lỗi có thể gây ra lỗi UI
+        const errorMessage = error && typeof error === 'object' ? error.message || 'Lỗi không xác định' : error;
+        alert('Đã xảy ra lỗi: ' + errorMessage);
       }
       
       // Initialize on page load
