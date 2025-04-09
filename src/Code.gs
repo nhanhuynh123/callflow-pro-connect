@@ -8,24 +8,28 @@ const DAILY_CUSTOMER_LIMIT = 100;
 // Web app endpoints
 function doGet(e) {
   try {
-    // Get the active user email
-    const userEmail = Session.getActiveUser().getEmail();
-    console.log("Active user email: " + userEmail);
+    // First check if there's a login parameter
+    if (e && e.parameter && e.parameter.login) {
+      return serveLoginPage();
+    }
     
-    // Check if user email is empty (which can happen when auth isn't working properly)
-    if (!userEmail || userEmail === "") {
-      return HtmlService.createHtmlOutput(
-        '<h1>Authentication Issue</h1>' +
-        '<p>Unable to retrieve your email address.</p>' +
-        '<p>This could be due to how the web app is deployed. Please contact the administrator.</p>' +
-        '<p>Technical details: The system cannot determine your email address through Session.getActiveUser().</p>'
-      )
-      .setTitle('Telesales CRM - Authentication Error')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    // Get the active user email - note this may be empty when deployed as "Execute as: Me"
+    const userEmail = Session.getActiveUser().getEmail();
+    console.log("Active user email from Session: " + userEmail);
+    
+    // If we have a userEmail parameter, use that instead
+    const providedEmail = e && e.parameter && e.parameter.userEmail ? e.parameter.userEmail : null;
+    const effectiveEmail = userEmail && userEmail !== "" ? userEmail : providedEmail;
+    
+    console.log("Effective email being used: " + effectiveEmail);
+    
+    // Check if we have no way to identify the user
+    if (!effectiveEmail) {
+      return serveLoginPage();
     }
     
     // Check if user is authorized
-    const isAuthorized = isAuthorizedUser(userEmail);
+    const isAuthorized = isAuthorizedUser(effectiveEmail);
     console.log("Is user authorized: " + isAuthorized);
     
     if (!isAuthorized) {
@@ -33,29 +37,37 @@ function doGet(e) {
       return HtmlService.createHtmlOutput(
         '<h1>Unauthorized Access</h1>' +
         '<p>You are not authorized to use this application.</p>' +
-        '<p>Your email: <strong>' + userEmail + '</strong></p>' +
+        '<p>Email used: <strong>' + effectiveEmail + '</strong></p>' +
         '<p>Please contact the administrator to get access.</p>' +
-        '<p><a href="https://accounts.google.com/logout" target="_blank">Log out and try with a different account</a></p>'
+        '<p><a href="' + getScriptUrl() + '?login=true" target="_self">Try different email</a></p>'
       )
       .setTitle('Telesales CRM - Unauthorized')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
     
     // Check if admin or regular user
-    const isAdminUser = isAdmin(userEmail);
+    const isAdminUser = isAdmin(effectiveEmail);
     console.log("Is user admin: " + isAdminUser);
     
+    // Create HTML template with user email as a parameter
+    let template;
+    let title;
+    
     if (isAdminUser) {
-      return HtmlService.createTemplateFromFile('admin')
-        .evaluate()
-        .setTitle('Telesales CRM - Admin Dashboard')
-        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      template = HtmlService.createTemplateFromFile('admin');
+      title = 'Telesales CRM - Admin Dashboard';
     } else {
-      return HtmlService.createTemplateFromFile('index')
-        .evaluate()
-        .setTitle('Telesales CRM - Agent Dashboard')
-        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      template = HtmlService.createTemplateFromFile('index');
+      title = 'Telesales CRM - Agent Dashboard';
     }
+    
+    // Set user email parameter for the template
+    template.userEmail = effectiveEmail;
+    
+    return template
+      .evaluate()
+      .setTitle(title)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } catch (error) {
     console.error("Error in doGet: " + error);
     return HtmlService.createHtmlOutput(
@@ -67,6 +79,22 @@ function doGet(e) {
     .setTitle('Telesales CRM - Error')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
+}
+
+// Serve login page
+function serveLoginPage() {
+  const template = HtmlService.createTemplateFromFile('login');
+  template.scriptUrl = getScriptUrl();
+  
+  return template
+    .evaluate()
+    .setTitle('Telesales CRM - Login')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// Get script URL
+function getScriptUrl() {
+  return ScriptApp.getService().getUrl();
 }
 
 // Include HTML files
@@ -107,40 +135,33 @@ function isAuthorizedUser(email) {
   }
 }
 
-// Check if user is an admin
-function isAdmin(email) {
-  if (!email || email === "") return false;
-  
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
-    const agentsData = agentsSheet.getDataRange().getValues();
-    
-    // Skip header row
-    for (let i = 1; i < agentsData.length; i++) {
-      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
-      const userEmail = email.toString().trim().toLowerCase();
-      
-      if (agentEmail === userEmail && agentsData[i][2] === true) {
-        return true;
-      }
-    }
-    
-    return false;
-  } catch (error) {
-    console.error("Error in isAdmin: " + error);
-    return false;
-  }
-}
-
-// Get current user's email
+// Get current user's email - now with fallback to parameter
 function getCurrentUserEmail() {
-  return Session.getActiveUser().getEmail();
+  const email = Session.getActiveUser().getEmail();
+  
+  // If email is empty, try to get it from cache or user property
+  if (!email || email === "") {
+    // This will be handled by the client-side logic that stores the email parameter
+    return CacheService.getScriptCache().get('current_user_email') || "";
+  }
+  
+  return email;
 }
 
-// Get current user's info
-function getCurrentUserInfo() {
-  const userEmail = getCurrentUserEmail();
+// Set current user email (for use with login form)
+function setCurrentUserEmail(email) {
+  if (email && email.trim() !== "") {
+    CacheService.getScriptCache().put('current_user_email', email, 21600); // Cache for 6 hours
+    return { success: true };
+  }
+  return { success: false, message: "Invalid email" };
+}
+
+// Get current user's info with email parameter support
+function getCurrentUserInfo(email) {
+  // Use provided email or try to get from session
+  const userEmail = email || getCurrentUserEmail();
+  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
   const agentsData = agentsSheet.getDataRange().getValues();
@@ -156,163 +177,6 @@ function getCurrentUserInfo() {
   }
   
   return { email: userEmail, name: userEmail.split('@')[0], isAdmin: false };
-}
-
-// Get customer count for agent today
-function getTodayCustomerCount() {
-  const userEmail = getCurrentUserEmail();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const dailyLimitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
-  const dailyData = dailyLimitsSheet.getDataRange().getValues();
-  
-  for (let i = 1; i < dailyData.length; i++) {
-    const recordDate = new Date(dailyData[i][0]);
-    recordDate.setHours(0, 0, 0, 0);
-    
-    if (recordDate.getTime() === today.getTime() && 
-        dailyData[i][1].toLowerCase() === userEmail.toLowerCase()) {
-      return dailyData[i][2];
-    }
-  }
-  
-  return 0;
-}
-
-// Check if agent has reached daily limit
-function hasReachedDailyLimit() {
-  return getTodayCustomerCount() >= DAILY_CUSTOMER_LIMIT;
-}
-
-// Get a new customer for the agent
-function getNewCustomer() {
-  const userEmail = getCurrentUserEmail();
-  
-  // Check daily limit
-  if (hasReachedDailyLimit()) {
-    return { 
-      success: false, 
-      message: 'You have reached your daily limit of ' + DAILY_CUSTOMER_LIMIT + ' customers.'
-    };
-  }
-  
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  const customerData = customersSheet.getDataRange().getValues();
-  const headers = customerData[0];
-  
-  // Find column indexes
-  const idColIndex = headers.indexOf('CustomerID');
-  const nameColIndex = headers.indexOf('Name');
-  const phoneColIndex = headers.indexOf('Phone');
-  const statusColIndex = headers.indexOf('Status');
-  const assignedToColIndex = headers.indexOf('AssignedTo');
-  const assignedTimestampColIndex = headers.indexOf('AssignedTimestamp');
-  
-  // Find a new customer
-  for (let i = 1; i < customerData.length; i++) {
-    if (customerData[i][statusColIndex] === 'New') {
-      // Found a new customer, assign to agent
-      const row = i + 1; // Convert to 1-based index for Google Sheets
-      
-      // Update customer data
-      customersSheet.getRange(row, statusColIndex + 1).setValue('Assigned');
-      customersSheet.getRange(row, assignedToColIndex + 1).setValue(userEmail);
-      const now = new Date();
-      customersSheet.getRange(row, assignedTimestampColIndex + 1).setValue(now);
-      
-      // Update daily limit
-      updateDailyLimit(userEmail);
-      
-      // Return customer info
-      return { 
-        success: true, 
-        customer: {
-          id: customerData[i][idColIndex],
-          name: customerData[i][nameColIndex],
-          phone: customerData[i][phoneColIndex]
-        }
-      };
-    }
-  }
-  
-  return { 
-    success: false, 
-    message: 'No new customers available at this time.'
-  };
-}
-
-// Update daily limit for agent
-function updateDailyLimit(userEmail) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const dailyLimitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
-  const dailyData = dailyLimitsSheet.getDataRange().getValues();
-  
-  // Check if today's record exists
-  let recordExists = false;
-  
-  for (let i = 1; i < dailyData.length; i++) {
-    const recordDate = new Date(dailyData[i][0]);
-    recordDate.setHours(0, 0, 0, 0);
-    
-    if (recordDate.getTime() === today.getTime() && 
-        dailyData[i][1].toLowerCase() === userEmail.toLowerCase()) {
-      // Update existing record
-      const row = i + 1;
-      const currentCount = dailyData[i][2];
-      dailyLimitsSheet.getRange(row, 3).setValue(currentCount + 1);
-      recordExists = true;
-      break;
-    }
-  }
-  
-  if (!recordExists) {
-    // Add new record
-    dailyLimitsSheet.appendRow([today, userEmail, 1]);
-  }
-}
-
-// Submit customer rating
-function submitCustomerRating(customerId, rating) {
-  const userEmail = getCurrentUserEmail();
-  
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  const customerData = customersSheet.getDataRange().getValues();
-  const headers = customerData[0];
-  
-  // Find column indexes
-  const idColIndex = headers.indexOf('CustomerID');
-  const statusColIndex = headers.indexOf('Status');
-  const assignedToColIndex = headers.indexOf('AssignedTo');
-  const ratingColIndex = headers.indexOf('Rating');
-  const contactedTimestampColIndex = headers.indexOf('ContactedTimestamp');
-  
-  // Find the customer
-  for (let i = 1; i < customerData.length; i++) {
-    if (customerData[i][idColIndex] === customerId && 
-        customerData[i][assignedToColIndex].toLowerCase() === userEmail.toLowerCase() &&
-        customerData[i][statusColIndex] === 'Assigned') {
-      // Update customer data
-      const row = i + 1; // Convert to 1-based index for Google Sheets
-      customersSheet.getRange(row, statusColIndex + 1).setValue('Contacted');
-      customersSheet.getRange(row, ratingColIndex + 1).setValue(rating);
-      const now = new Date();
-      customersSheet.getRange(row, contactedTimestampColIndex + 1).setValue(now);
-      
-      return { success: true };
-    }
-  }
-  
-  return { 
-    success: false, 
-    message: 'Customer not found or not assigned to you.'
-  };
 }
 
 // Get current assigned customer

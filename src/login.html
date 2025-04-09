@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <?!= include('stylesheet'); ?>
+    <title>Telesales CRM - Login</title>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Telesales CRM</h1>
+      </header>
+      
+      <main>
+        <div class="card">
+          <h2>Đăng nhập</h2>
+          
+          <div id="login-form">
+            <p class="text-center">Vui lòng nhập email của bạn để đăng nhập vào hệ thống.</p>
+            
+            <div class="form-group">
+              <label for="email">Email:</label>
+              <input type="email" id="email" class="form-control" required>
+            </div>
+            
+            <div class="text-center mt-3">
+              <button id="login-btn" class="btn btn-primary">Đăng nhập</button>
+            </div>
+            
+            <p id="login-message" class="message text-center mt-3 hidden"></p>
+          </div>
+        </div>
+      </main>
+      
+      <footer>
+        <p>&copy; 2025 Telesales CRM</p>
+      </footer>
+    </div>
+    
+    <script>
+      // Login button click handler
+      document.getElementById('login-btn').addEventListener('click', function() {
+        const email = document.getElementById('email').value.trim();
+        
+        if (!email) {
+          showMessage('login-message', 'Vui lòng nhập email của bạn', 'error');
+          return;
+        }
+        
+        // Validate email format
+        if (!validateEmail(email)) {
+          showMessage('login-message', 'Email không hợp lệ', 'error');
+          return;
+        }
+        
+        // Redirect to main page with email parameter
+        window.location.href = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
+      });
+      
+      // Validate email format
+      function validateEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+      }
+      
+      // Show message
+      function showMessage(elementId, message, type) {
+        const element = document.getElementById(elementId);
+        element.textContent = message;
+        element.classList.remove('hidden', 'success', 'error');
+        element.classList.add(type);
+      }
+    </script>
+  </body>
+</html>
