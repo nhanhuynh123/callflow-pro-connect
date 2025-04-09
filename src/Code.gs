@@ -135,6 +135,38 @@ function isAuthorizedUser(email) {
   }
 }
 
+// Check if user is an admin
+function isAdmin(email) {
+  if (!email || email === "") {
+    console.error("Empty email provided to isAdmin");
+    return false;
+  }
+  
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
+    const agentsData = agentsSheet.getDataRange().getValues();
+    
+    // Skip header row
+    for (let i = 1; i < agentsData.length; i++) {
+      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
+      const isAdminFlag = agentsData[i][2]; // The IsAdmin column (3rd column)
+      const userEmail = email.toString().trim().toLowerCase();
+      
+      if (agentEmail === userEmail && isAdminFlag === true) {
+        console.log("User is an admin: " + email);
+        return true;
+      }
+    }
+    
+    console.log("User is not an admin: " + email);
+    return false;
+  } catch (error) {
+    console.error("Error in isAdmin: " + error);
+    return false;
+  }
+}
+
 // Get current user's email - now with fallback to parameter
 function getCurrentUserEmail() {
   const email = Session.getActiveUser().getEmail();
