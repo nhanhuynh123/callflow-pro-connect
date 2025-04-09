@@ -63,20 +63,30 @@
         // Vô hiệu hóa nút đăng nhập để tránh nhấp nhiều lần
         document.getElementById('login-btn').disabled = true;
         
-        try {
-          // Chuyển hướng đến trang chính với tham số email
-          const redirectUrl = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
-          console.log("Redirecting to: " + redirectUrl);
-          
-          // Sử dụng cách khác để chuyển hướng
-          setTimeout(function() {
-            window.location.href = redirectUrl;
-          }, 100);
-        } catch (error) {
-          console.error("Redirect error:", error);
-          showMessage('login-message', 'Lỗi chuyển hướng: ' + error, 'error');
-          document.getElementById('login-btn').disabled = false;
-        }
+        // Gọi server-side function để kiểm tra xem email có phải là agent không
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              // Nếu là agent, chuyển hướng đến trang chính
+              showMessage('login-message', 'Đăng nhập thành công. Đang chuyển hướng...', 'success');
+              const redirectUrl = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
+              console.log("Redirecting to: " + redirectUrl);
+              
+              setTimeout(function() {
+                window.location.href = redirectUrl;
+              }, 1000);
+            } else {
+              // Nếu không phải agent, hiển thị thông báo lỗi
+              showMessage('login-message', 'Email không có quyền truy cập. Vui lòng liên hệ admin.', 'error');
+              document.getElementById('login-btn').disabled = false;
+            }
+          })
+          .withFailureHandler(function(error) {
+            console.error("Login error:", error);
+            showMessage('login-message', 'Lỗi đăng nhập: ' + error, 'error');
+            document.getElementById('login-btn').disabled = false;
+          })
+          .checkAgentAccess(email);
       });
       
       // Validate email format

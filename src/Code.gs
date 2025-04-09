@@ -698,3 +698,36 @@ function setupSpreadsheet() {
     message: 'Spreadsheet structure set up successfully.'
   };
 }
+
+// Check if email belongs to an agent
+function checkAgentAccess(email) {
+  if (!email || email === "") {
+    console.error("Empty email provided to checkAgentAccess");
+    return { success: false };
+  }
+  
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
+    const agentsData = agentsSheet.getDataRange().getValues();
+    
+    // Skip header row
+    for (let i = 1; i < agentsData.length; i++) {
+      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
+      const userEmail = email.toString().trim().toLowerCase();
+      
+      console.log("Checking agent access: [" + agentEmail + "] with [" + userEmail + "]");
+      
+      if (agentEmail === userEmail) {
+        console.log("Agent access granted for: " + email);
+        return { success: true };
+      }
+    }
+    
+    console.log("Agent access denied for: " + email);
+    return { success: false };
+  } catch (error) {
+    console.error("Error in checkAgentAccess: " + error);
+    return { success: false, message: error.toString() };
+  }
+}
