@@ -31,6 +31,7 @@
             </div>
             
             <p id="login-message" class="message text-center mt-3 hidden"></p>
+            <div id="debug-info" class="text-center mt-3" style="font-size: 0.8em; color: #666;"></div>
           </div>
         </div>
       </main>
@@ -45,6 +46,7 @@
       document.getElementById('login-btn').addEventListener('click', function() {
         const email = document.getElementById('email').value.trim();
         const loginMessage = document.getElementById('login-message');
+        const debugInfo = document.getElementById('debug-info');
         
         if (!email) {
           showMessage('login-message', 'Vui lòng nhập email của bạn', 'error');
@@ -59,6 +61,7 @@
         
         // Hiển thị thông báo loading
         showMessage('login-message', 'Đang xử lý...', 'info');
+        debugInfo.innerHTML = 'Đang kiểm tra email: ' + email;
         
         // Vô hiệu hóa nút đăng nhập để tránh nhấp nhiều lần
         document.getElementById('login-btn').disabled = true;
@@ -66,25 +69,36 @@
         // Gọi server-side function để kiểm tra xem email có phải là agent không
         google.script.run
           .withSuccessHandler(function(result) {
+            debugInfo.innerHTML += '<br>Kết quả kiểm tra: ' + JSON.stringify(result);
+            
             if (result.success) {
               // Nếu là agent, chuyển hướng đến trang chính
               showMessage('login-message', 'Đăng nhập thành công. Đang chuyển hướng...', 'success');
-              const redirectUrl = '<?= scriptUrl ?>?userEmail=' + encodeURIComponent(email);
-              console.log("Redirecting to: " + redirectUrl);
+              const redirectUrl = '<?= getScriptUrl() ?>?userEmail=' + encodeURIComponent(email);
+              debugInfo.innerHTML += '<br>URL chuyển hướng: ' + redirectUrl;
               
+              // Sử dụng window.open để mở trang mới
               setTimeout(function() {
+                debugInfo.innerHTML += '<br>Đang chuyển hướng...';
                 window.location.href = redirectUrl;
+                
+                // Nếu sau 3 giây vẫn chưa chuyển hướng, hiển thị nút để người dùng nhấp
+                setTimeout(function() {
+                  debugInfo.innerHTML += '<br>Chuyển hướng tự động không thành công. Vui lòng nhấp vào <a href="' + redirectUrl + '" target="_self">đây</a> để tiếp tục.';
+                }, 3000);
               }, 1000);
             } else {
               // Nếu không phải agent, hiển thị thông báo lỗi
               showMessage('login-message', 'Email không có quyền truy cập. Vui lòng liên hệ admin.', 'error');
               document.getElementById('login-btn').disabled = false;
+              debugInfo.innerHTML += '<br>Từ chối truy cập';
             }
           })
           .withFailureHandler(function(error) {
             console.error("Login error:", error);
             showMessage('login-message', 'Lỗi đăng nhập: ' + error, 'error');
             document.getElementById('login-btn').disabled = false;
+            debugInfo.innerHTML += '<br>Lỗi: ' + error;
           })
           .checkAgentAccess(email);
       });
