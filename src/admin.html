@@ -44,7 +44,6 @@
               
               <h3 class="mt-4">Hiệu suất các agent</h3>
               <div id="agent-performance-container" class="agent-performance-grid">
-                <!-- Agent performance charts will be dynamically inserted here -->
                 <div class="text-center">
                   <p>Đang tải dữ liệu hiệu suất các agent...</p>
                 </div>
@@ -895,8 +894,11 @@
         // Close modals when clicking the X
         document.querySelectorAll('.close-modal').forEach(function(button) {
           button.addEventListener('click', function() {
-            closeEditCustomerModal();
-            closeDeleteCustomerModal();
+            // Find the parent modal and hide it
+            const modal = this.closest('.modal');
+            if (modal) {
+              modal.classList.add('hidden');
+            }
           });
         });
         
