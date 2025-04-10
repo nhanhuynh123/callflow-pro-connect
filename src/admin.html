@@ -38,13 +38,16 @@
               </div>
               
               <div class="chart-container">
-                <h3>Rating Distribution</h3>
-                <canvas id="rating-distribution-chart"></canvas>
+                <h3>Trạng thái khách hàng</h3>
+                <canvas id="customer-progress-chart"></canvas>
               </div>
               
-              <div class="chart-container">
-                <h3>Agent Performance</h3>
-                <canvas id="agent-performance-chart"></canvas>
+              <h3 class="mt-4">Hiệu suất các agent</h3>
+              <div id="agent-performance-container" class="agent-performance-grid">
+                <!-- Agent performance charts will be dynamically inserted here -->
+                <div class="text-center">
+                  <p>Đang tải dữ liệu hiệu suất các agent...</p>
+                </div>
               </div>
             </div>
           </div>
@@ -223,11 +226,13 @@
                     <th>Agent</th>
                     <th>Rating</th>
                     <th>Contact Time</th>
+                    <th>Note</th>
+                    <th>Contact Count</th>
                   </tr>
                 </thead>
                 <tbody id="history-table-body">
                   <tr>
-                    <td colspan="6" class="text-center">Loading contact history...</td>
+                    <td colspan="8" class="text-center">Loading contact history...</td>
                   </tr>
                 </tbody>
               </table>
@@ -307,14 +312,7 @@
       // Logout function
       function logout() {
         if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-          google.script.run
-            .withSuccessHandler(function(result) {
-              if (result.success && result.logoutUrl) {
-                window.location.href = result.logoutUrl;
-              }
-            })
-            .withFailureHandler(handleError)
-            .logoutUser();
+          window.location.href = '?login=true';
         }
       }
       
@@ -361,20 +359,20 @@
           }
         });
         
-        // Rating Distribution Chart
-        const ratingData = {
-          labels: ['No Rating', '1 Star', '2 Stars', '3 Stars'],
+        // Customer Progress Chart (new chart showing progress of customer contacts)
+        const customerProgressData = {
+          labels: ['Mới', 'Đã đánh giá', 'Đã hoàn thành'],
           datasets: [{
-            label: 'Customers',
-            data: [stats.ratingStats.noRating, stats.ratingStats.rating1, stats.ratingStats.rating2, stats.ratingStats.rating3],
-            backgroundColor: ['#9E9E9E', '#F44336', '#FF9800', '#4CAF50'],
+            label: 'Khách hàng',
+            data: [stats.progressStats.new, stats.progressStats.inProgress, stats.progressStats.completed],
+            backgroundColor: ['#4CAF50', '#FFC107', '#2196F3'],
           }]
         };
         
-        const ratingCtx = document.getElementById('rating-distribution-chart').getContext('2d');
-        new Chart(ratingCtx, {
+        const customerProgressCtx = document.getElementById('customer-progress-chart').getContext('2d');
+        new Chart(customerProgressCtx, {
           type: 'doughnut',
-          data: ratingData,
+          data: customerProgressData,
           options: {
             responsive: true,
             plugins: {
@@ -383,75 +381,76 @@
               },
               title: {
                 display: true,
-                text: 'Rating Distribution'
+                text: 'Tiến độ liên hệ khách hàng'
               }
             }
           }
         });
         
-        // Agent Performance Chart
+        // Agent Performance Charts - one chart per agent
         if (stats.agentPerformance.length > 0) {
-          const agentLabels = stats.agentPerformance.map(agent => agent.email.split('@')[0]);
-          const contactedData = stats.agentPerformance.map(agent => agent.contacted);
-          const rating1Data = stats.agentPerformance.map(agent => agent.rating1);
-          const rating2Data = stats.agentPerformance.map(agent => agent.rating2);
-          const rating3Data = stats.agentPerformance.map(agent => agent.rating3);
+          const agentContainer = document.getElementById('agent-performance-container');
+          agentContainer.innerHTML = ''; // Clear container
           
-          const agentData = {
-            labels: agentLabels,
-            datasets: [
-              {
-                label: 'Contacted',
-                data: contactedData,
-                backgroundColor: '#2196F3',
+          stats.agentPerformance.forEach(agent => {
+            // Create container for each agent chart
+            const agentChartDiv = document.createElement('div');
+            agentChartDiv.className = 'agent-chart';
+            
+            // Create canvas for chart
+            const canvas = document.createElement('canvas');
+            canvas.width = 300;
+            canvas.height = 360;
+            canvas.id = 'agent-chart-' + agent.email.replace(/[@.]/g, '-');
+            
+            // Add chart title
+            const title = document.createElement('h4');
+            title.textContent = agent.email.split('@')[0];
+            
+            // Add elements to container
+            agentChartDiv.appendChild(title);
+            agentChartDiv.appendChild(canvas);
+            agentContainer.appendChild(agentChartDiv);
+            
+            // Create chart
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+              type: 'bar',
+              data: {
+                labels: ['Đánh giá 1', 'Đánh giá 2', 'Đánh giá 3', 'Loại'],
+                datasets: [{
+                  label: 'Số lượng',
+                  data: [agent.rating1, agent.rating2, agent.rating3, agent.rating4],
+                  backgroundColor: ['#F44336', '#FF9800', '#4CAF50', '#9E9E9E'],
+                }]
               },
-              {
-                label: '1 Star',
-                data: rating1Data,
-                backgroundColor: '#F44336',
-              },
-              {
-                label: '2 Stars',
-                data: rating2Data,
-                backgroundColor: '#FF9800',
-              },
-              {
-                label: '3 Stars',
-                data: rating3Data,
-                backgroundColor: '#4CAF50',
-              }
-            ]
-          };
-          
-          const agentCtx = document.getElementById('agent-performance-chart').getContext('2d');
-          new Chart(agentCtx, {
-            type: 'bar',
-            data: agentData,
-            options: {
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'bottom',
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    display: false,
+                  },
+                  title: {
+                    display: true,
+                    text: 'Đã liên hệ: ' + agent.contacted + ' khách hàng'
+                  }
                 },
-                title: {
-                  display: true,
-                  text: 'Agent Performance'
-                }
-              },
-              scales: {
-                x: {
-                  stacked: false,
-                },
-                y: {
-                  stacked: false
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      precision: 0
+                    }
+                  }
                 }
               }
-            }
+            });
           });
         } else {
           // No agent data available
-          document.getElementById('agent-performance-chart').parentElement.innerHTML = 
-            '<h3>Agent Performance</h3><p class="text-center">No agent performance data available yet.</p>';
+          document.getElementById('agent-performance-container').innerHTML = 
+            '<p class="text-center">No agent performance data available yet.</p>';
         }
       }
       
@@ -659,7 +658,7 @@
           .removeAgent(email);
       }
       
-      // Load contact history
+      // Load contact history - Fixed to properly display contact history data
       function loadContactHistory(agentEmail, startDate, endDate) {
         google.script.run
           .withSuccessHandler(displayContactHistory)
@@ -667,13 +666,13 @@
           .getContactHistory(agentEmail, startDate, endDate);
       }
       
-      // Display contact history
+      // Display contact history - Updated to show notes and contact count
       function displayContactHistory(history) {
         const tableBody = document.getElementById('history-table-body');
         tableBody.innerHTML = '';
         
         if (history.length === 0) {
-          tableBody.innerHTML = '<tr><td colspan="6" class="text-center">No contact history found.</td></tr>';
+          tableBody.innerHTML = '<tr><td colspan="8" class="text-center">No contact history found.</td></tr>';
           return;
         }
         
@@ -694,6 +693,8 @@
             <td>${entry.AssignedTo}</td>
             <td>${entry.Rating || '-'}</td>
             <td>${contactDate}</td>
+            <td>${entry.Note || '-'}</td>
+            <td>${entry.ContactCount || '1'}</td>
           `;
           
           tableBody.appendChild(row);

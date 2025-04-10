@@ -15,6 +15,9 @@
         <div class="user-info">
           <span id="user-name">Loading...</span>
           <span id="user-email" class="d-none"><?= userEmail ?></span>
+          <div id="performance-container" class="performance-chart mt-2">
+            <canvas id="agent-performance-chart" width="300" height="100"></canvas>
+          </div>
           <span id="daily-count">Đã nhận: 0/100 khách hàng hôm nay</span>
           <button id="logout-btn" class="btn btn-sm btn-secondary mt-2">Đăng xuất</button>
         </div>
@@ -34,17 +37,17 @@
           
           <div id="customer-section" class="hidden">
             <div class="customer-info">
-              <div class="info-row">
-                <div class="label">ID:</div>
-                <div id="customer-id" class="value"></div>
-              </div>
+              <!-- Ẩn ID khách hàng -->
+              <input type="hidden" id="customer-id">
               <div class="info-row">
                 <div class="label">Tên:</div>
                 <div id="customer-name" class="value"></div>
               </div>
               <div class="info-row">
                 <div class="label">SĐT:</div>
-                <div id="customer-phone" class="value"></div>
+                <div id="customer-phone" class="value">
+                  <a id="phone-link" href="tel:" class="phone-link"></a>
+                </div>
               </div>
             </div>
             
@@ -52,10 +55,18 @@
               <h3>Đánh giá khách hàng</h3>
               <p>Sau khi liên hệ với khách hàng, vui lòng đánh giá:</p>
               
-              <div class="rating-buttons">
+              <!-- Căn giữa các nút đánh giá -->
+              <div class="rating-buttons text-center">
                 <button class="btn btn-primary btn-rating" data-rating="1">1 ⭐</button>
                 <button class="btn btn-primary btn-rating" data-rating="2">2 ⭐</button>
                 <button class="btn btn-primary btn-rating" data-rating="3">3 ⭐</button>
+                <button class="btn btn-danger btn-rating" data-rating="4">Loại ⛔</button>
+              </div>
+              
+              <!-- Thêm trường ghi chú -->
+              <div class="form-group mt-3">
+                <label for="rating-note">Ghi chú:</label>
+                <textarea id="rating-note" class="form-control" rows="2" placeholder="Nhập ghi chú về khách hàng (nếu có)"></textarea>
               </div>
               
               <p id="rating-message" class="message hidden"></p>
@@ -69,11 +80,13 @@
       </footer>
     </div>
     
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
     <script>
       // Variables
       let currentCustomer = null;
       let userEmail = '';
       let isProcessing = false; // Cờ ngăn thực hiện yêu cầu đồng thời
+      let performanceChart = null;
       
       // Initialize page
       function initPage() {
@@ -90,6 +103,9 @@
         // Check for current assigned customer
         checkCurrentCustomer();
         
+        // Khởi tạo biểu đồ hiệu suất
+        initializePerformanceChart();
+        
         // Add event listeners
         document.getElementById('get-customer-btn').addEventListener('click', getNewCustomer);
         
@@ -105,6 +121,62 @@
         
         // Set up logout button
         document.getElementById('logout-btn').addEventListener('click', logout);
+      }
+      
+      // Khởi tạo biểu đồ hiệu suất
+      function initializePerformanceChart() {
+        // Lấy dữ liệu hiệu suất của agent hiện tại
+        google.script.run
+          .withSuccessHandler(function(data) {
+            renderPerformanceChart(data);
+          })
+          .withFailureHandler(handleError)
+          .getAgentPerformanceData(userEmail);
+      }
+      
+      // Vẽ biểu đồ hiệu suất
+      function renderPerformanceChart(data) {
+        const ctx = document.getElementById('agent-performance-chart').getContext('2d');
+        
+        if (performanceChart) {
+          performanceChart.destroy();
+        }
+        
+        performanceChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: [{
+              label: 'Khách hàng đã liên hệ',
+              data: data.contacted,
+              borderColor: '#2196F3',
+              backgroundColor: 'rgba(33, 150, 243, 0.1)',
+              fill: true,
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: 'Hiệu suất theo thời gian'
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            }
+          }
+        });
       }
       
       // Handle user info
@@ -190,14 +262,21 @@
       function showCustomerInfo(customer) {
         currentCustomer = customer;
         
-        // Set customer info
-        document.getElementById('customer-id').textContent = customer.id;
+        // Set customer info (ID now hidden)
+        document.getElementById('customer-id').value = customer.id;
         document.getElementById('customer-name').textContent = customer.name;
-        document.getElementById('customer-phone').textContent = customer.phone;
+        
+        // Set phone number as a clickable link
+        const phoneLink = document.getElementById('phone-link');
+        phoneLink.href = 'tel:' + customer.phone;
+        phoneLink.textContent = customer.phone;
         
         // Show customer section, hide no-customer section
         document.getElementById('customer-section').classList.remove('hidden');
         document.getElementById('no-customer-section').classList.add('hidden');
+        
+        // Clear any previous rating notes
+        document.getElementById('rating-note').value = '';
       }
       
       // Submit rating
@@ -214,6 +293,9 @@
         });
         
         showMessage('rating-message', 'Đang xử lý đánh giá...', 'info');
+        
+        // Lấy giá trị ghi chú
+        const note = document.getElementById('rating-note').value.trim();
         
         google.script.run
           .withSuccessHandler(function(result) {
@@ -234,10 +316,16 @@
                 // Clear rating message
                 document.getElementById('rating-message').classList.add('hidden');
                 
+                // Clear rating note
+                document.getElementById('rating-note').value = '';
+                
                 // Enable rating buttons
                 document.querySelectorAll('.btn-rating').forEach(button => {
                   button.disabled = false;
                 });
+                
+                // Update performance chart
+                initializePerformanceChart();
               }, 2000);
             } else {
               showMessage('rating-message', 'Lỗi: ' + result.message, 'error');
@@ -257,7 +345,7 @@
               button.disabled = false;
             });
           })
-          .submitCustomerRating(currentCustomer.id, parseInt(rating));
+          .submitCustomerRating(currentCustomer.id, parseInt(rating), note);
       }
       
       // Logout function

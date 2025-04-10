@@ -4,6 +4,7 @@ const CUSTOMER_SHEET_NAME = 'Customers';
 const AGENTS_SHEET_NAME = 'Agents';
 const DAILY_LIMITS_SHEET_NAME = 'DailyLimits';
 const DAILY_CUSTOMER_LIMIT = 100;
+const MAX_CONTACT_ATTEMPTS = 3;
 
 // Web app endpoints
 function doGet(e) {
@@ -245,6 +246,279 @@ function getCurrentAssignedCustomer() {
   return { success: false };
 }
 
+// Get new customer - Updated to handle max 3 attempts per customer and max 1 call per agent
+function getNewCustomer() {
+  try {
+    const userEmail = getCurrentUserEmail();
+    
+    // Get today's date at midnight for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // First check if the agent has reached their daily limit
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const limitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
+    const limitsData = limitsSheet.getDataRange().getValues();
+    
+    // Format today's date as YYYY-MM-DD for comparison
+    const todayStr = Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    
+    // Check agent's daily count
+    let currentCount = 0;
+    for (let i = 1; i < limitsData.length; i++) {
+      const limitDate = limitsData[i][0];
+      const limitEmail = limitsData[i][1];
+      
+      // If date is a Date object, format it
+      const limitDateStr = limitDate instanceof Date ? 
+        Utilities.formatDate(limitDate, Session.getScriptTimeZone(), "yyyy-MM-dd") : limitDate;
+      
+      if (limitDateStr === todayStr && limitEmail.toLowerCase() === userEmail.toLowerCase()) {
+        currentCount = limitsData[i][2];
+        break;
+      }
+    }
+    
+    if (currentCount >= DAILY_CUSTOMER_LIMIT) {
+      return { success: false, message: 'Bạn đã đạt giới hạn hàng ngày. Vui lòng thử lại vào ngày mai.' };
+    }
+    
+    // Get customers data
+    const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+    const customersData = customersSheet.getDataRange().getValues();
+    const headers = customersData[0];
+    
+    // Find column indexes
+    const idColIndex = headers.indexOf('CustomerID');
+    const nameColIndex = headers.indexOf('Name');
+    const phoneColIndex = headers.indexOf('Phone');
+    const statusColIndex = headers.indexOf('Status');
+    const assignedToColIndex = headers.indexOf('AssignedTo');
+    const assignedTimestampColIndex = headers.indexOf('AssignedTimestamp');
+    const contactCountColIndex = headers.indexOf('ContactCount');
+    const contact1ColIndex = headers.indexOf('Contact1');
+    const contact2ColIndex = headers.indexOf('Contact2');
+    const contact3ColIndex = headers.indexOf('Contact3');
+    
+    // First try to find a customer with:
+    // 1. Status 'New' and ContactCount < MAX_CONTACT_ATTEMPTS
+    // or
+    // 2. Status 'Contacted' but ContactCount < MAX_CONTACT_ATTEMPTS and not contacted today
+    // and
+    // 3. Not previously contacted by this agent
+    
+    // Array to hold suitable customers
+    const eligibleCustomers = [];
+    
+    for (let i = 1; i < customersData.length; i++) {
+      const status = customersData[i][statusColIndex];
+      let contactCount = customersData[i][contactCountColIndex] || 0;
+      
+      // Skip if already reached max contact attempts
+      if (contactCount >= MAX_CONTACT_ATTEMPTS) {
+        continue;
+      }
+      
+      // Check if this agent has already contacted this customer
+      let alreadyContactedByThisAgent = false;
+      for (let j = 1; j <= contactCount; j++) {
+        const contactAgentCol = headers.indexOf('Contact' + j + 'Agent');
+        if (contactAgentCol > -1 && customersData[i][contactAgentCol] === userEmail) {
+          alreadyContactedByThisAgent = true;
+          break;
+        }
+      }
+      
+      // Skip if already contacted by this agent
+      if (alreadyContactedByThisAgent) {
+        continue;
+      }
+      
+      // For contacted customers, check if they were contacted today
+      if (status === 'Contacted') {
+        const lastContactTimestampCol = headers.indexOf('Contact' + contactCount + 'Timestamp');
+        if (lastContactTimestampCol > -1) {
+          const lastContactTime = customersData[i][lastContactTimestampCol];
+          if (lastContactTime instanceof Date) {
+            const lastContactDate = new Date(lastContactTime);
+            lastContactDate.setHours(0, 0, 0, 0);
+            
+            // Skip if contacted today
+            if (lastContactDate.getTime() === today.getTime()) {
+              continue;
+            }
+          }
+        }
+      }
+      
+      // This customer is eligible
+      eligibleCustomers.push({
+        row: i + 1, // 1-based index for sheet
+        id: customersData[i][idColIndex],
+        name: customersData[i][nameColIndex],
+        phone: customersData[i][phoneColIndex],
+        contactCount: contactCount
+      });
+    }
+    
+    // If no eligible customers found
+    if (eligibleCustomers.length === 0) {
+      return { success: false, message: 'Không tìm thấy khách hàng hợp lệ. Tất cả khách hàng đã được liên hệ hoặc bạn đã liên hệ với tất cả khách hàng phù hợp.' };
+    }
+    
+    // Choose a random customer from eligible ones
+    const randomIndex = Math.floor(Math.random() * eligibleCustomers.length);
+    const selectedCustomer = eligibleCustomers[randomIndex];
+    
+    // Update the customer as assigned
+    const row = selectedCustomer.row;
+    
+    // Set status to Assigned
+    customersSheet.getRange(row, statusColIndex + 1).setValue('Assigned');
+    
+    // Set assigned to
+    customersSheet.getRange(row, assignedToColIndex + 1).setValue(userEmail);
+    
+    // Set assigned timestamp
+    const now = new Date();
+    customersSheet.getRange(row, assignedTimestampColIndex + 1).setValue(now);
+    
+    // Update agent's daily count
+    const todayRow = getOrCreateDailyLimitRow(userEmail);
+    const currentDailyCount = todayRow.count || 0;
+    limitsSheet.getRange(todayRow.row, 3).setValue(currentDailyCount + 1);
+    
+    return {
+      success: true,
+      customer: {
+        id: selectedCustomer.id,
+        name: selectedCustomer.name,
+        phone: selectedCustomer.phone
+      }
+    };
+  } catch (error) {
+    console.error("Error in getNewCustomer: " + error);
+    return { success: false, message: 'Lỗi: ' + error };
+  }
+}
+
+// Helper function to get or create a daily limit row for an agent
+function getOrCreateDailyLimitRow(email) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const limitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
+  const limitsData = limitsSheet.getDataRange().getValues();
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Format date as YYYY-MM-DD
+  const todayStr = Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  
+  // Check if row exists
+  for (let i = 1; i < limitsData.length; i++) {
+    const rowDate = limitsData[i][0];
+    const rowEmail = limitsData[i][1];
+    
+    // If date is a Date object, format it
+    const rowDateStr = rowDate instanceof Date ? 
+      Utilities.formatDate(rowDate, Session.getScriptTimeZone(), "yyyy-MM-dd") : rowDate;
+    
+    if (rowDateStr === todayStr && rowEmail.toLowerCase() === email.toLowerCase()) {
+      return { row: i + 1, count: limitsData[i][2] }; // return 1-based row index
+    }
+  }
+  
+  // Row doesn't exist, create it
+  limitsSheet.appendRow([today, email, 0]);
+  return { row: limitsSheet.getLastRow(), count: 0 };
+}
+
+// Submit customer rating - Updated to handle notes and 4 ratings
+function submitCustomerRating(customerId, rating, note) {
+  try {
+    const userEmail = getCurrentUserEmail();
+    
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+    const customersData = customersSheet.getDataRange().getValues();
+    const headers = customersData[0];
+    
+    // Find column indexes
+    const idColIndex = headers.indexOf('CustomerID');
+    const statusColIndex = headers.indexOf('Status');
+    const assignedToColIndex = headers.indexOf('AssignedTo');
+    const ratingColIndex = headers.indexOf('Rating');
+    const contactCountColIndex = headers.indexOf('ContactCount');
+    const noteColIndex = headers.indexOf('Note');
+    
+    // Find the customer
+    for (let i = 1; i < customersData.length; i++) {
+      if (customersData[i][idColIndex] === customerId) {
+        const row = i + 1; // Convert to 1-based index
+        
+        // Verify assignment
+        if (customersData[i][assignedToColIndex].toLowerCase() !== userEmail.toLowerCase()) {
+          return { 
+            success: false, 
+            message: 'Error: This customer is not assigned to you.' 
+          };
+        }
+        
+        // Get current contact count
+        let contactCount = customersData[i][contactCountColIndex] || 0;
+        contactCount++;
+        
+        // Update customer
+        customersSheet.getRange(row, statusColIndex + 1).setValue('Contacted');
+        customersSheet.getRange(row, ratingColIndex + 1).setValue(rating);
+        customersSheet.getRange(row, contactCountColIndex + 1).setValue(contactCount);
+        
+        // Store note if provided
+        if (note && noteColIndex > -1) {
+          customersSheet.getRange(row, noteColIndex + 1).setValue(note);
+        }
+        
+        // Store contact details in the appropriate Contact(N) columns
+        const contactPrefix = 'Contact' + contactCount;
+        
+        // Store agent
+        const contactAgentCol = headers.indexOf(contactPrefix + 'Agent');
+        if (contactAgentCol > -1) {
+          customersSheet.getRange(row, contactAgentCol + 1).setValue(userEmail);
+        }
+        
+        // Store rating
+        const contactRatingCol = headers.indexOf(contactPrefix + 'Rating');
+        if (contactRatingCol > -1) {
+          customersSheet.getRange(row, contactRatingCol + 1).setValue(rating);
+        }
+        
+        // Store timestamp
+        const contactTimestampCol = headers.indexOf(contactPrefix + 'Timestamp');
+        if (contactTimestampCol > -1) {
+          customersSheet.getRange(row, contactTimestampCol + 1).setValue(new Date());
+        }
+        
+        // Store note
+        const contactNoteCol = headers.indexOf(contactPrefix + 'Note');
+        if (contactNoteCol > -1 && note) {
+          customersSheet.getRange(row, contactNoteCol + 1).setValue(note);
+        }
+        
+        return { success: true };
+      }
+    }
+    
+    return { 
+      success: false, 
+      message: 'Error: Customer not found.' 
+    };
+  } catch (error) {
+    console.error("Error in submitCustomerRating: " + error);
+    return { success: false, message: 'Error: ' + error };
+  }
+}
+
 // Logout function
 function logoutUser() {
   var authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
@@ -254,6 +528,88 @@ function logoutUser() {
     success: true,
     logoutUrl: 'https://accounts.google.com/logout'
   };
+}
+
+// Get agent performance data for chart
+function getAgentPerformanceData(agentEmail) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+    const customersData = customersSheet.getDataRange().getValues();
+    const headers = customersData[0];
+    
+    // Find contacts by this agent, grouped by date
+    const contactsByDate = {};
+    const lastWeek = [];
+    
+    // Create date labels for the last 7 days
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      const dateStr = Utilities.formatDate(date, Session.getScriptTimeZone(), "MM-dd");
+      lastWeek.push(dateStr);
+      contactsByDate[dateStr] = 0;
+    }
+    
+    // Count contacts by this agent for each day
+    for (let i = 1; i < customersData.length; i++) {
+      for (let j = 1; j <= 3; j++) {
+        const contactAgentCol = headers.indexOf('Contact' + j + 'Agent');
+        const contactTimestampCol = headers.indexOf('Contact' + j + 'Timestamp');
+        
+        if (contactAgentCol > -1 && contactTimestampCol > -1) {
+          const contactAgent = customersData[i][contactAgentCol];
+          const contactTimestamp = customersData[i][contactTimestampCol];
+          
+          if (contactAgent && contactAgent.toLowerCase() === agentEmail.toLowerCase() && contactTimestamp) {
+            const contactDate = new Date(contactTimestamp);
+            // Only count contacts from the last 7 days
+            if ((today - contactDate) <= 7 * 24 * 60 * 60 * 1000) {
+              const dateStr = Utilities.formatDate(contactDate, Session.getScriptTimeZone(), "MM-dd");
+              if (contactsByDate[dateStr] !== undefined) {
+                contactsByDate[dateStr]++;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Create datasets for chart
+    const contactedData = lastWeek.map(date => contactsByDate[date] || 0);
+    
+    return {
+      labels: lastWeek,
+      contacted: contactedData
+    };
+  } catch (error) {
+    console.error("Error in getAgentPerformanceData: " + error);
+    return {
+      labels: [],
+      contacted: []
+    };
+  }
+}
+
+// Get today's customer count
+function getTodayCustomerCount() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  const customerData = customersSheet.getDataRange().getValues();
+  const headers = customerData[0];
+  
+  const idColIndex = headers.indexOf('CustomerID');
+  
+  let count = 0;
+  
+  for (let i = 1; i < customerData.length; i++) {
+    if (customerData[i][statusColIndex] === 'Assigned') {
+      count++;
+    }
+  }
+  
+  return count;
 }
 
 // ADMIN FUNCTIONS
@@ -356,7 +712,7 @@ function addCustomer(name, phone) {
   }
   const newId = 'C' + (maxId + 1).toString().padStart(4, '0');
   
-  // Add new customer
+  // Add new customer with updated columns
   customersSheet.appendRow([
     newId,           // CustomerID
     name,            // Name
@@ -365,7 +721,21 @@ function addCustomer(name, phone) {
     '',              // AssignedTo
     '',              // AssignedTimestamp
     '',              // Rating
-    ''               // ContactedTimestamp
+    '',              // ContactedTimestamp
+    0,               // ContactCount
+    '',              // Note
+    '',              // Contact1Agent
+    '',              // Contact1Rating
+    '',              // Contact1Timestamp
+    '',              // Contact1Note
+    '',              // Contact2Agent
+    '',              // Contact2Rating
+    '',              // Contact2Timestamp
+    '',              // Contact2Note
+    '',              // Contact3Agent
+    '',              // Contact3Rating
+    '',              // Contact3Timestamp
+    ''               // Contact3Note
   ]);
   
   return { success: true };
@@ -505,7 +875,7 @@ function importCustomersFromCSV(csvData) {
   }
 }
 
-// Get dashboard statistics
+// Get dashboard statistics - Updated to include progress stats
 function getDashboardStats() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
@@ -516,6 +886,7 @@ function getDashboardStats() {
   const statusColIndex = headers.indexOf('Status');
   const ratingColIndex = headers.indexOf('Rating');
   const assignedToColIndex = headers.indexOf('AssignedTo');
+  const contactCountColIndex = headers.indexOf('ContactCount');
   
   // Initialize counters
   const customerStats = {
@@ -524,11 +895,18 @@ function getDashboardStats() {
     contacted: 0
   };
   
+  const progressStats = {
+    new: 0,           // No contacts yet
+    inProgress: 0,    // 1-2 contacts
+    completed: 0      // 3 contacts
+  };
+  
   const ratingStats = {
     noRating: 0,
     rating1: 0,
     rating2: 0,
-    rating3: 0
+    rating3: 0,
+    rating4: 0
   };
   
   const agentStats = {};
@@ -538,6 +916,7 @@ function getDashboardStats() {
     const status = customerData[i][statusColIndex];
     const rating = customerData[i][ratingColIndex];
     const agent = customerData[i][assignedToColIndex];
+    const contactCount = customerData[i][contactCountColIndex] || 0;
     
     // Customer status counts
     if (status === 'New') {
@@ -556,6 +935,8 @@ function getDashboardStats() {
         ratingStats.rating2++;
       } else if (rating === 3) {
         ratingStats.rating3++;
+      } else if (rating === 4) {
+        ratingStats.rating4++;
       }
       
       // Agent performance
@@ -565,7 +946,8 @@ function getDashboardStats() {
             contacted: 0,
             rating1: 0,
             rating2: 0,
-            rating3: 0
+            rating3: 0,
+            rating4: 0
           };
         }
         
@@ -577,8 +959,19 @@ function getDashboardStats() {
           agentStats[agent].rating2++;
         } else if (rating === 3) {
           agentStats[agent].rating3++;
+        } else if (rating === 4) {
+          agentStats[agent].rating4++;
         }
       }
+    }
+    
+    // Progress statistics
+    if (contactCount === 0) {
+      progressStats.new++;
+    } else if (contactCount >= 1 && contactCount < 3) {
+      progressStats.inProgress++;
+    } else if (contactCount >= 3) {
+      progressStats.completed++;
     }
   }
   
@@ -590,18 +983,20 @@ function getDashboardStats() {
       contacted: agentStats[email].contacted,
       rating1: agentStats[email].rating1,
       rating2: agentStats[email].rating2,
-      rating3: agentStats[email].rating3
+      rating3: agentStats[email].rating3,
+      rating4: agentStats[email].rating4
     });
   }
   
   return {
     customerStats: customerStats,
+    progressStats: progressStats,
     ratingStats: ratingStats,
     agentPerformance: agentPerformance
   };
 }
 
-// Get contact history with filters
+// Get contact history with filters - Updated to include notes and contact count
 function getContactHistory(agentEmail, startDate, endDate) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
@@ -612,6 +1007,18 @@ function getContactHistory(agentEmail, startDate, endDate) {
   const statusColIndex = headers.indexOf('Status');
   const assignedToColIndex = headers.indexOf('AssignedTo');
   const contactedTimestampColIndex = headers.indexOf('ContactedTimestamp');
+  const noteColIndex = headers.indexOf('Note');
+  const contactCountColIndex = headers.indexOf('ContactCount');
+  
+  // Find all Contact(N) column indexes
+  const contactColumns = {};
+  for (let i = 1; i <= 3; i++) {
+    const prefix = 'Contact' + i;
+    contactColumns[prefix + 'Agent'] = headers.indexOf(prefix + 'Agent');
+    contactColumns[prefix + 'Rating'] = headers.indexOf(prefix + 'Rating');
+    contactColumns[prefix + 'Timestamp'] = headers.indexOf(prefix + 'Timestamp');
+    contactColumns[prefix + 'Note'] = headers.indexOf(prefix + 'Note');
+  }
   
   // Convert dates
   let startDateTime = null;
@@ -629,50 +1036,94 @@ function getContactHistory(agentEmail, startDate, endDate) {
   
   const history = [];
   
-  // Filter customers
+  // Loop through customers and each of their contacts
   for (let i = 1; i < customerData.length; i++) {
-    // Skip if not contacted
-    if (customerData[i][statusColIndex] !== 'Contacted') {
-      continue;
-    }
+    const contactCount = customerData[i][contactCountColIndex] || 0;
     
-    // Apply agent filter
-    if (agentEmail && customerData[i][assignedToColIndex].toLowerCase() !== agentEmail.toLowerCase()) {
-      continue;
-    }
+    if (contactCount === 0) continue;
     
-    // Apply date filters
-    const contactedDate = new Date(customerData[i][contactedTimestampColIndex]);
-    if (startDateTime && contactedDate < startDateTime) {
-      continue;
+    // Process each contact separately
+    for (let contactNum = 1; contactNum <= contactCount; contactNum++) {
+      const contactPrefix = 'Contact' + contactNum;
+      const contactAgentCol = contactColumns[contactPrefix + 'Agent'];
+      const contactTimestampCol = contactColumns[contactPrefix + 'Timestamp'];
+      const contactRatingCol = contactColumns[contactPrefix + 'Rating'];
+      const contactNoteCol = contactColumns[contactPrefix + 'Note'];
+      
+      if (contactAgentCol < 0 || contactTimestampCol < 0) continue;
+      
+      const contactAgent = customerData[i][contactAgentCol];
+      const contactTimestamp = customerData[i][contactTimestampCol];
+      
+      if (!contactAgent || !contactTimestamp) continue;
+      
+      // Apply agent filter
+      if (agentEmail && contactAgent.toLowerCase() !== agentEmail.toLowerCase()) {
+        continue;
+      }
+      
+      // Apply date filters
+      if (startDateTime && contactTimestamp < startDateTime) {
+        continue;
+      }
+      if (endDateTime && contactTimestamp > endDateTime) {
+        continue;
+      }
+      
+      // Create contact history entry
+      const contactEntry = {};
+      
+      // Copy basic customer info
+      for (let j = 0; j < headers.length; j++) {
+        contactEntry[headers[j]] = customerData[i][j];
+      }
+      
+      // Override with contact-specific data
+      contactEntry.AssignedTo = contactAgent;
+      contactEntry.ContactedTimestamp = contactTimestamp;
+      contactEntry.Rating = customerData[i][contactRatingCol];
+      contactEntry.Note = contactNoteCol >= 0 ? customerData[i][contactNoteCol] : '';
+      contactEntry.ContactCount = contactNum;
+      
+      history.push(contactEntry);
     }
-    if (endDateTime && contactedDate > endDateTime) {
-      continue;
-    }
-    
-    // Add to history
-    const customer = {};
-    for (let j = 0; j < headers.length; j++) {
-      customer[headers[j]] = customerData[i][j];
-    }
-    history.push(customer);
   }
   
   return history;
 }
 
-// Initialize spreadsheet structure
+// Initialize spreadsheet structure - Updated with new columns
 function setupSpreadsheet() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
-  // Create Customers sheet if it doesn't exist
+  // Create Customers sheet with updated structure
   let customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
   if (!customersSheet) {
     customersSheet = ss.insertSheet(CUSTOMER_SHEET_NAME);
     customersSheet.appendRow([
       'CustomerID', 'Name', 'Phone', 'Status', 'AssignedTo', 
-      'AssignedTimestamp', 'Rating', 'ContactedTimestamp'
+      'AssignedTimestamp', 'Rating', 'ContactedTimestamp', 'ContactCount', 'Note',
+      'Contact1Agent', 'Contact1Rating', 'Contact1Timestamp', 'Contact1Note',
+      'Contact2Agent', 'Contact2Rating', 'Contact2Timestamp', 'Contact2Note',
+      'Contact3Agent', 'Contact3Rating', 'Contact3Timestamp', 'Contact3Note'
     ]);
+  } else {
+    // Check if we need to add new columns
+    const headers = customersSheet.getRange(1, 1, 1, customersSheet.getLastColumn()).getValues()[0];
+    const missingColumns = [
+      'ContactCount', 'Note',
+      'Contact1Agent', 'Contact1Rating', 'Contact1Timestamp', 'Contact1Note',
+      'Contact2Agent', 'Contact2Rating', 'Contact2Timestamp', 'Contact2Note',
+      'Contact3Agent', 'Contact3Rating', 'Contact3Timestamp', 'Contact3Note'
+    ];
+    
+    for (const column of missingColumns) {
+      if (!headers.includes(column)) {
+        // Add missing column
+        customersSheet.getRange(1, headers.length + 1).setValue(column);
+        headers.push(column);
+      }
+    }
   }
   
   // Create Agents sheet if it doesn't exist
