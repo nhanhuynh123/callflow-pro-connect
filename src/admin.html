@@ -273,6 +273,13 @@
         setupCsvFileUpload();
       }
       
+      // Function to hide all modals
+      function hideAllModals() {
+        document.querySelectorAll('.modal').forEach(function(modal) {
+          modal.classList.add('hidden');
+        });
+      }
+      
       // Set up CSV file upload
       function setupCsvFileUpload() {
         const fileInput = document.getElementById('csv-file-input');
@@ -520,6 +527,7 @@
       
       // Open edit customer modal
       function openEditCustomerModal(id, name, phone) {
+        hideAllModals(); // Hide any other open modals first
         document.getElementById('edit-customer-id').value = id;
         document.getElementById('edit-customer-name').value = name;
         document.getElementById('edit-customer-phone').value = phone;
@@ -558,6 +566,7 @@
       
       // Open delete customer modal
       function openDeleteCustomerModal(id) {
+        hideAllModals(); // Hide any other open modals first
         document.getElementById('delete-customer-id').value = id;
         document.getElementById('delete-customer-modal').classList.remove('hidden');
       }
@@ -846,6 +855,9 @@
         
         // Activate selected tab button
         document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
+        
+        // Hide any open modals when switching tabs
+        hideAllModals();
       }
       
       // Add event listeners
@@ -912,9 +924,13 @@
           closeDeleteCustomerModal();
         });
         
-        // Ensure modals are hidden on page load
-        document.querySelectorAll('.modal').forEach(function(modal) {
-          modal.classList.add('hidden');
+        // Click outside modals to close them
+        window.addEventListener('click', function(event) {
+          document.querySelectorAll('.modal').forEach(function(modal) {
+            if (event.target === modal) {
+              modal.classList.add('hidden');
+            }
+          });
         });
       });
     </script>
