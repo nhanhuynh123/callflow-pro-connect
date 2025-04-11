@@ -1,0 +1,41 @@
+
+<div id="agents-tab" class="tab-content">
+  <div class="card">
+    <h2>Agent Management</h2>
+    
+    <div class="form-group">
+      <h3>Add New Agent</h3>
+      <div class="input-group">
+        <input type="email" id="new-agent-email" placeholder="Agent Email" class="form-control">
+        <input type="text" id="new-agent-name" placeholder="Agent Name" class="form-control">
+        <div class="checkbox-group">
+          <input type="checkbox" id="new-agent-admin">
+          <label for="new-agent-admin">Admin</label>
+        </div>
+        <button id="add-agent-btn" class="btn btn-primary">Add Agent</button>
+      </div>
+      <p id="add-agent-message" class="message hidden"></p>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>Agent List</h2>
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="agents-table-body">
+          <tr>
+            <td colspan="4" class="text-center">Loading agents...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

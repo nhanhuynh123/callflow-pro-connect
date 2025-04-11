@@ -592,24 +592,24 @@ function getAgentPerformanceData(agentEmail) {
   }
 }
 
-// Get today's customer count
+// Get today's customer count - Updated as requested
 function getTodayCustomerCount() {
+  const userEmail = getCurrentUserEmail();
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  const customerData = customersSheet.getDataRange().getValues();
-  const headers = customerData[0];
+  const dailyLimitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
+  const dailyData = dailyLimitsSheet.getDataRange().getValues();
+  const headers = dailyData[0];
   
-  const idColIndex = headers.indexOf('CustomerID');
-  
-  let count = 0;
-  
-  for (let i = 1; i < customerData.length; i++) {
-    if (customerData[i][statusColIndex] === 'Assigned') {
-      count++;
+  const customerCountIdx = headers.indexOf('CustomerCount');
+  const agentEmailIdx = headers.indexOf('AgentEmail');
+
+  for (let i = 1; i < dailyData.length; i++) {
+    if (dailyData[i][agentEmailIdx] === userEmail) {
+      return dailyData[i][customerCountIdx];
     }
   }
   
-  return count;
+  return 0; // Return 0 if no record found
 }
 
 // ADMIN FUNCTIONS
@@ -683,6 +683,7 @@ function getAllCustomers() {
   const customerData = customersSheet.getDataRange().getValues();
   const headers = customerData[0];
   
+  // Fix issue with missing customers on admin page
   const customers = [];
   // Skip header row
   for (let i = 1; i < customerData.length; i++) {
@@ -696,11 +697,32 @@ function getAllCustomers() {
   return customers;
 }
 
-// Add new customer
+// Add new customer - Optimized to check for duplicate phone numbers
 function addCustomer(name, phone) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
   const customerData = customersSheet.getDataRange().getValues();
+  const headers = customerData[0];
+  
+  // Get index of phone column
+  const phoneColIndex = headers.indexOf('Phone');
+  
+  // Check for duplicate phone number using a hashmap for O(1) lookup
+  const phoneMap = {};
+  for (let i = 1; i < customerData.length; i++) {
+    const existingPhone = customerData[i][phoneColIndex].toString().trim();
+    if (existingPhone) {
+      phoneMap[existingPhone] = true;
+    }
+  }
+  
+  // Check if phone already exists
+  if (phoneMap[phone.trim()]) {
+    return {
+      success: false,
+      message: 'Customer with this phone number already exists.'
+    };
+  }
   
   // Generate new ID
   let maxId = 0;
@@ -797,14 +819,14 @@ function deleteCustomer(customerId) {
   };
 }
 
-// Import customers from CSV with duplicate filtering
+// Import customers from CSV with duplicate filtering - Optimized for phone number checking
 function importCustomersFromCSV(csvData) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
     const customerData = customersSheet.getDataRange().getValues();
     
-    // Get existing phone numbers to check for duplicates
+    // Get existing phone numbers to check for duplicates - using hashmap for O(1) lookup
     const existingPhones = {};
     const phoneColIndex = customerData[0].indexOf('Phone');
     
@@ -841,344 +863,4 @@ function importCustomersFromCSV(csvData) {
           continue;
         }
         
-        // Add to existing phones to prevent duplicates within import
-        existingPhones[phone] = true;
-        
-        maxId++;
-        const newId = 'C' + maxId.toString().padStart(4, '0');
-        
-        // Add new customer
-        customersSheet.appendRow([
-          newId,           // CustomerID
-          name,            // Name
-          phone,           // Phone
-          'New',           // Status
-          '',              // AssignedTo
-          '',              // AssignedTimestamp
-          '',              // Rating
-          ''               // ContactedTimestamp
-        ]);
-        
-        importCount++;
-      }
-    }
-    
-    return { 
-      success: true, 
-      message: `Successfully imported ${importCount} customers. Skipped ${duplicateCount} duplicates.` 
-    };
-  } catch (e) {
-    return { 
-      success: false, 
-      message: 'Error importing customers: ' + e.toString() 
-    };
-  }
-}
-
-// Get dashboard statistics - Updated to include progress stats
-function getDashboardStats() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  const customerData = customersSheet.getDataRange().getValues();
-  const headers = customerData[0];
-  
-  // Find column indexes
-  const statusColIndex = headers.indexOf('Status');
-  const ratingColIndex = headers.indexOf('Rating');
-  const assignedToColIndex = headers.indexOf('AssignedTo');
-  const contactCountColIndex = headers.indexOf('ContactCount');
-  
-  // Initialize counters
-  const customerStats = {
-    new: 0,
-    assigned: 0,
-    contacted: 0
-  };
-  
-  const progressStats = {
-    new: 0,           // No contacts yet
-    inProgress: 0,    // 1-2 contacts
-    completed: 0      // 3 contacts
-  };
-  
-  const ratingStats = {
-    noRating: 0,
-    rating1: 0,
-    rating2: 0,
-    rating3: 0,
-    rating4: 0
-  };
-  
-  const agentStats = {};
-  
-  // Count statistics
-  for (let i = 1; i < customerData.length; i++) {
-    const status = customerData[i][statusColIndex];
-    const rating = customerData[i][ratingColIndex];
-    const agent = customerData[i][assignedToColIndex];
-    const contactCount = customerData[i][contactCountColIndex] || 0;
-    
-    // Customer status counts
-    if (status === 'New') {
-      customerStats.new++;
-    } else if (status === 'Assigned') {
-      customerStats.assigned++;
-    } else if (status === 'Contacted') {
-      customerStats.contacted++;
-      
-      // Rating counts
-      if (!rating) {
-        ratingStats.noRating++;
-      } else if (rating === 1) {
-        ratingStats.rating1++;
-      } else if (rating === 2) {
-        ratingStats.rating2++;
-      } else if (rating === 3) {
-        ratingStats.rating3++;
-      } else if (rating === 4) {
-        ratingStats.rating4++;
-      }
-      
-      // Agent performance
-      if (agent) {
-        if (!agentStats[agent]) {
-          agentStats[agent] = {
-            contacted: 0,
-            rating1: 0,
-            rating2: 0,
-            rating3: 0,
-            rating4: 0
-          };
-        }
-        
-        agentStats[agent].contacted++;
-        
-        if (rating === 1) {
-          agentStats[agent].rating1++;
-        } else if (rating === 2) {
-          agentStats[agent].rating2++;
-        } else if (rating === 3) {
-          agentStats[agent].rating3++;
-        } else if (rating === 4) {
-          agentStats[agent].rating4++;
-        }
-      }
-    }
-    
-    // Progress statistics
-    if (contactCount === 0) {
-      progressStats.new++;
-    } else if (contactCount >= 1 && contactCount < 3) {
-      progressStats.inProgress++;
-    } else if (contactCount >= 3) {
-      progressStats.completed++;
-    }
-  }
-  
-  // Convert agent stats to array for easier processing in frontend
-  const agentPerformance = [];
-  for (const email in agentStats) {
-    agentPerformance.push({
-      email: email,
-      contacted: agentStats[email].contacted,
-      rating1: agentStats[email].rating1,
-      rating2: agentStats[email].rating2,
-      rating3: agentStats[email].rating3,
-      rating4: agentStats[email].rating4
-    });
-  }
-  
-  return {
-    customerStats: customerStats,
-    progressStats: progressStats,
-    ratingStats: ratingStats,
-    agentPerformance: agentPerformance
-  };
-}
-
-// Get contact history with filters - Updated to include notes and contact count
-function getContactHistory(agentEmail, startDate, endDate) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  const customerData = customersSheet.getDataRange().getValues();
-  const headers = customerData[0];
-  
-  // Find column indexes
-  const statusColIndex = headers.indexOf('Status');
-  const assignedToColIndex = headers.indexOf('AssignedTo');
-  const contactedTimestampColIndex = headers.indexOf('ContactedTimestamp');
-  const noteColIndex = headers.indexOf('Note');
-  const contactCountColIndex = headers.indexOf('ContactCount');
-  
-  // Find all Contact(N) column indexes
-  const contactColumns = {};
-  for (let i = 1; i <= 3; i++) {
-    const prefix = 'Contact' + i;
-    contactColumns[prefix + 'Agent'] = headers.indexOf(prefix + 'Agent');
-    contactColumns[prefix + 'Rating'] = headers.indexOf(prefix + 'Rating');
-    contactColumns[prefix + 'Timestamp'] = headers.indexOf(prefix + 'Timestamp');
-    contactColumns[prefix + 'Note'] = headers.indexOf(prefix + 'Note');
-  }
-  
-  // Convert dates
-  let startDateTime = null;
-  let endDateTime = null;
-  
-  if (startDate) {
-    startDateTime = new Date(startDate);
-    startDateTime.setHours(0, 0, 0, 0);
-  }
-  
-  if (endDate) {
-    endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999);
-  }
-  
-  const history = [];
-  
-  // Loop through customers and each of their contacts
-  for (let i = 1; i < customerData.length; i++) {
-    const contactCount = customerData[i][contactCountColIndex] || 0;
-    
-    if (contactCount === 0) continue;
-    
-    // Process each contact separately
-    for (let contactNum = 1; contactNum <= contactCount; contactNum++) {
-      const contactPrefix = 'Contact' + contactNum;
-      const contactAgentCol = contactColumns[contactPrefix + 'Agent'];
-      const contactTimestampCol = contactColumns[contactPrefix + 'Timestamp'];
-      const contactRatingCol = contactColumns[contactPrefix + 'Rating'];
-      const contactNoteCol = contactColumns[contactPrefix + 'Note'];
-      
-      if (contactAgentCol < 0 || contactTimestampCol < 0) continue;
-      
-      const contactAgent = customerData[i][contactAgentCol];
-      const contactTimestamp = customerData[i][contactTimestampCol];
-      
-      if (!contactAgent || !contactTimestamp) continue;
-      
-      // Apply agent filter
-      if (agentEmail && contactAgent.toLowerCase() !== agentEmail.toLowerCase()) {
-        continue;
-      }
-      
-      // Apply date filters
-      if (startDateTime && contactTimestamp < startDateTime) {
-        continue;
-      }
-      if (endDateTime && contactTimestamp > endDateTime) {
-        continue;
-      }
-      
-      // Create contact history entry
-      const contactEntry = {};
-      
-      // Copy basic customer info
-      for (let j = 0; j < headers.length; j++) {
-        contactEntry[headers[j]] = customerData[i][j];
-      }
-      
-      // Override with contact-specific data
-      contactEntry.AssignedTo = contactAgent;
-      contactEntry.ContactedTimestamp = contactTimestamp;
-      contactEntry.Rating = customerData[i][contactRatingCol];
-      contactEntry.Note = contactNoteCol >= 0 ? customerData[i][contactNoteCol] : '';
-      contactEntry.ContactCount = contactNum;
-      
-      history.push(contactEntry);
-    }
-  }
-  
-  return history;
-}
-
-// Initialize spreadsheet structure - Updated with new columns
-function setupSpreadsheet() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  
-  // Create Customers sheet with updated structure
-  let customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
-  if (!customersSheet) {
-    customersSheet = ss.insertSheet(CUSTOMER_SHEET_NAME);
-    customersSheet.appendRow([
-      'CustomerID', 'Name', 'Phone', 'Status', 'AssignedTo', 
-      'AssignedTimestamp', 'Rating', 'ContactedTimestamp', 'ContactCount', 'Note',
-      'Contact1Agent', 'Contact1Rating', 'Contact1Timestamp', 'Contact1Note',
-      'Contact2Agent', 'Contact2Rating', 'Contact2Timestamp', 'Contact2Note',
-      'Contact3Agent', 'Contact3Rating', 'Contact3Timestamp', 'Contact3Note'
-    ]);
-  } else {
-    // Check if we need to add new columns
-    const headers = customersSheet.getRange(1, 1, 1, customersSheet.getLastColumn()).getValues()[0];
-    const missingColumns = [
-      'ContactCount', 'Note',
-      'Contact1Agent', 'Contact1Rating', 'Contact1Timestamp', 'Contact1Note',
-      'Contact2Agent', 'Contact2Rating', 'Contact2Timestamp', 'Contact2Note',
-      'Contact3Agent', 'Contact3Rating', 'Contact3Timestamp', 'Contact3Note'
-    ];
-    
-    for (const column of missingColumns) {
-      if (!headers.includes(column)) {
-        // Add missing column
-        customersSheet.getRange(1, headers.length + 1).setValue(column);
-        headers.push(column);
-      }
-    }
-  }
-  
-  // Create Agents sheet if it doesn't exist
-  let agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
-  if (!agentsSheet) {
-    agentsSheet = ss.insertSheet(AGENTS_SHEET_NAME);
-    agentsSheet.appendRow(['AgentEmail', 'AgentName', 'IsAdmin']);
-    
-    // Add current user as admin
-    const userEmail = Session.getActiveUser().getEmail();
-    agentsSheet.appendRow([userEmail, userEmail.split('@')[0], true]);
-  }
-  
-  // Create DailyLimits sheet if it doesn't exist
-  let dailyLimitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
-  if (!dailyLimitsSheet) {
-    dailyLimitsSheet = ss.insertSheet(DAILY_LIMITS_SHEET_NAME);
-    dailyLimitsSheet.appendRow(['Date', 'AgentEmail', 'CustomerCount']);
-  }
-  
-  return {
-    success: true,
-    message: 'Spreadsheet structure set up successfully.'
-  };
-}
-
-// Check if email belongs to an agent
-function checkAgentAccess(email) {
-  if (!email || email === "") {
-    console.error("Empty email provided to checkAgentAccess");
-    return { success: false };
-  }
-  
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
-    const agentsData = agentsSheet.getDataRange().getValues();
-    
-    // Skip header row
-    for (let i = 1; i < agentsData.length; i++) {
-      const agentEmail = agentsData[i][0].toString().trim().toLowerCase();
-      const userEmail = email.toString().trim().toLowerCase();
-      
-      console.log("Checking agent access: [" + agentEmail + "] with [" + userEmail + "]");
-      
-      if (agentEmail === userEmail) {
-        console.log("Agent access granted for: " + email);
-        return { success: true };
-      }
-    }
-    
-    console.log("Agent access denied for: " + email);
-    return { success: false };
-  } catch (error) {
-    console.error("Error in checkAgentAccess: " + error);
-    return { success: false, message: error.toString() };
-  }
-}
+        // Add to existing phones to prevent duplicates

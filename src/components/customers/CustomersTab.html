@@ -1,0 +1,103 @@
+
+<div id="customers-tab" class="tab-content">
+  <div class="card">
+    <h2>Customer Management</h2>
+    
+    <div class="form-group">
+      <h3>Add New Customer</h3>
+      <div class="input-group">
+        <input type="text" id="new-customer-name" placeholder="Customer Name" class="form-control">
+        <input type="text" id="new-customer-phone" placeholder="Phone Number" class="form-control">
+        <button id="add-customer-btn" class="btn btn-primary">Add Customer</button>
+      </div>
+      <p id="add-customer-message" class="message hidden"></p>
+    </div>
+    
+    <div class="form-group">
+      <h3>Import Customers (CSV)</h3>
+      <p class="hint">Format: Name,Phone (one per line). Duplicates will be automatically filtered out.</p>
+      <div class="csv-import-container">
+        <div class="file-upload-wrapper">
+          <input type="file" id="csv-file-input" accept=".csv" class="file-upload-input">
+          <label for="csv-file-input" class="file-upload-label">
+            <span class="upload-icon">📄</span>
+            <span>Chọn file CSV</span>
+          </label>
+          <span id="selected-file-name" class="selected-file-name">Chưa có file được chọn</span>
+        </div>
+        <button id="process-csv-btn" class="btn btn-primary" disabled>Đọc file CSV</button>
+      </div>
+      <textarea id="csv-data" class="form-control mt-3" rows="5" placeholder="John Doe,+1234567890&#10;Jane Smith,+0987654321" readonly></textarea>
+      <button id="import-csv-btn" class="btn btn-primary">Import</button>
+      <p id="import-message" class="message hidden"></p>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>Customer List</h2>
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Status</th>
+            <th>Assigned To</th>
+            <th>Rating</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="customers-table-body">
+          <tr>
+            <td colspan="7" class="text-center">Loading customers...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Customer Modal -->
+<div id="edit-customer-modal" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Customer</h3>
+      <span class="close-modal">&times;</span>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-customer-id">
+      <div class="form-group">
+        <label for="edit-customer-name">Name</label>
+        <input type="text" id="edit-customer-name" class="form-control">
+      </div>
+      <div class="form-group">
+        <label for="edit-customer-phone">Phone</label>
+        <input type="text" id="edit-customer-phone" class="form-control">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="save-customer-btn" class="btn btn-primary">Save Changes</button>
+      <button id="cancel-edit-btn" class="btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Customer Confirmation Modal -->
+<div id="delete-customer-modal" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Confirm Deletion</h3>
+      <span class="close-modal">&times;</span>
+    </div>
+    <div class="modal-body">
+      <p>Are you sure you want to delete this customer?</p>
+      <p><strong>This action cannot be undone.</strong></p>
+      <input type="hidden" id="delete-customer-id">
+    </div>
+    <div class="modal-footer">
+      <button id="confirm-delete-btn" class="btn btn-danger">Delete</button>
+      <button id="cancel-delete-btn" class="btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>

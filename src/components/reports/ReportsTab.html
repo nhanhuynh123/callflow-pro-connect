@@ -1,0 +1,40 @@
+
+<div id="reports-tab" class="tab-content">
+  <div class="card">
+    <h2>Contact History</h2>
+    
+    <div class="form-group">
+      <h3>Filter</h3>
+      <div class="input-group">
+        <select id="agent-filter" class="form-control">
+          <option value="">All Agents</option>
+        </select>
+        <input type="date" id="start-date" class="form-control" placeholder="Start Date">
+        <input type="date" id="end-date" class="form-control" placeholder="End Date">
+        <button id="apply-filter-btn" class="btn btn-primary">Apply Filter</button>
+      </div>
+    </div>
+    
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Customer ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Agent</th>
+            <th>Rating</th>
+            <th>Contact Time</th>
+            <th>Note</th>
+            <th>Contact Count</th>
+          </tr>
+        </thead>
+        <tbody id="history-table-body">
+          <tr>
+            <td colspan="8" class="text-center">Loading contact history...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
