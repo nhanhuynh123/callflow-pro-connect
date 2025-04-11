@@ -863,4 +863,53 @@ function importCustomersFromCSV(csvData) {
           continue;
         }
         
-        // Add to existing phones to prevent
+        // Add to existing phones to prevent duplicates in same import
+        existingPhones[phone] = true;
+        
+        // Create new ID
+        maxId++;
+        const newId = 'C' + maxId.toString().padStart(4, '0');
+        
+        // Add new customer
+        customersSheet.appendRow([
+          newId,       // CustomerID
+          name,        // Name
+          phone,       // Phone
+          'New',       // Status
+          '',          // AssignedTo
+          '',          // AssignedTimestamp
+          '',          // Rating
+          '',          // ContactedTimestamp
+          0,           // ContactCount
+          '',          // Note
+          '',          // Contact1Agent
+          '',          // Contact1Rating
+          '',          // Contact1Timestamp
+          '',          // Contact1Note
+          '',          // Contact2Agent
+          '',          // Contact2Rating
+          '',          // Contact2Timestamp
+          '',          // Contact2Note
+          '',          // Contact3Agent
+          '',          // Contact3Rating
+          '',          // Contact3Timestamp
+          ''           // Contact3Note
+        ]);
+        
+        importCount++;
+      }
+    }
+    
+    return {
+      success: true,
+      importCount: importCount,
+      duplicateCount: duplicateCount
+    };
+  } catch (error) {
+    console.error("Error in importCustomersFromCSV: " + error);
+    return {
+      success: false,
+      message: 'Error: ' + error
+    };
+  }
+}
