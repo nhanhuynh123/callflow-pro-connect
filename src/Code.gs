@@ -600,12 +600,12 @@ function getTodayCustomerCount() {
   const dailyData = dailyLimitsSheet.getDataRange().getValues();
   const headers = dailyData[0];
   
-  const customerCountIdx = headers.indexOf('CustomerCount');
-  const agentEmailIdx = headers.indexOf('AgentEmail');
+  const customerCount = headers.indexOf('CustomerCount');
+  const agentEmail = headers.indexOf('AgentEmail');
 
   for (let i = 1; i < dailyData.length; i++) {
-    if (dailyData[i][agentEmailIdx] === userEmail) {
-      return dailyData[i][customerCountIdx];
+    if (dailyData[i][agentEmail] === userEmail) {
+      return dailyData[i][customerCount];
     }
   }
   
@@ -907,6 +907,111 @@ function importCustomersFromCSV(csvData) {
     };
   } catch (error) {
     console.error("Error in importCustomersFromCSV: " + error);
+    return {
+      success: false,
+      message: 'Error: ' + error
+    };
+  }
+}
+
+// Setup spreadsheets - Creates required sheets if they don't exist
+function setupSpreadsheets() {
+  try {
+    // Open or create the spreadsheet
+    let ss;
+    try {
+      ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      console.log("Opened existing spreadsheet");
+    } catch (e) {
+      console.log("Creating new spreadsheet");
+      ss = SpreadsheetApp.create('Telesales CRM Data');
+      // Store the new spreadsheet ID - this won't persist but is useful for manual setup
+      console.log("New spreadsheet created with ID: " + ss.getId());
+    }
+    
+    // Setup Customers sheet
+    let customersSheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+    if (!customersSheet) {
+      console.log("Creating Customers sheet");
+      customersSheet = ss.insertSheet(CUSTOMER_SHEET_NAME);
+      // Set headers
+      customersSheet.appendRow([
+        'CustomerID',        // A
+        'Name',              // B
+        'Phone',             // C
+        'Status',            // D
+        'AssignedTo',        // E
+        'AssignedTimestamp', // F
+        'Rating',            // G
+        'ContactedTimestamp',// H
+        'ContactCount',      // I
+        'Note',              // J
+        'Contact1Agent',     // K
+        'Contact1Rating',    // L
+        'Contact1Timestamp', // M
+        'Contact1Note',      // N
+        'Contact2Agent',     // O
+        'Contact2Rating',    // P
+        'Contact2Timestamp', // Q
+        'Contact2Note',      // R
+        'Contact3Agent',     // S
+        'Contact3Rating',    // T
+        'Contact3Timestamp', // U
+        'Contact3Note'       // V
+      ]);
+      
+      // Format headers
+      customersSheet.getRange('A1:V1').setFontWeight('bold');
+      customersSheet.setFrozenRows(1);
+    }
+    
+    // Setup Agents sheet
+    let agentsSheet = ss.getSheetByName(AGENTS_SHEET_NAME);
+    if (!agentsSheet) {
+      console.log("Creating Agents sheet");
+      agentsSheet = ss.insertSheet(AGENTS_SHEET_NAME);
+      // Set headers
+      agentsSheet.appendRow([
+        'Email',    // A
+        'Name',     // B
+        'IsAdmin'   // C
+      ]);
+      
+      // Add default admin
+      agentsSheet.appendRow([
+        Session.getEffectiveUser().getEmail(),
+        'Admin',
+        true
+      ]);
+      
+      // Format headers
+      agentsSheet.getRange('A1:C1').setFontWeight('bold');
+      agentsSheet.setFrozenRows(1);
+    }
+    
+    // Setup DailyLimits sheet
+    let dailyLimitsSheet = ss.getSheetByName(DAILY_LIMITS_SHEET_NAME);
+    if (!dailyLimitsSheet) {
+      console.log("Creating DailyLimits sheet");
+      dailyLimitsSheet = ss.insertSheet(DAILY_LIMITS_SHEET_NAME);
+      // Set headers
+      dailyLimitsSheet.appendRow([
+        'Date',          // A
+        'AgentEmail',    // B
+        'CustomerCount'  // C
+      ]);
+      
+      // Format headers
+      dailyLimitsSheet.getRange('A1:C1').setFontWeight('bold');
+      dailyLimitsSheet.setFrozenRows(1);
+    }
+    
+    return {
+      success: true,
+      message: 'Spreadsheets setup complete'
+    };
+  } catch (error) {
+    console.error("Error in setupSpreadsheets: " + error);
     return {
       success: false,
       message: 'Error: ' + error
